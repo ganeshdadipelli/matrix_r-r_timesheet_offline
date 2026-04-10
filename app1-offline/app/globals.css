@@ -1,0 +1,11 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+@layer components {
+  .btn-primary{@apply bg-primary-600 text-white px-4 py-2 rounded-lg font-medium text-sm hover:bg-primary-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed;}
+  .btn-secondary{@apply bg-white text-slate-700 border border-slate-300 px-4 py-2 rounded-lg font-medium text-sm hover:bg-slate-50 transition-all;}
+  .input-field{@apply w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white;}
+  .card{@apply bg-white rounded-xl border border-slate-200 shadow-sm;}
+  .table-th{@apply px-4 py-2 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide bg-slate-50 border-b border-slate-200;}
+  .table-td{@apply px-4 py-2.5 text-sm text-slate-700 border-b border-slate-100;}
+}

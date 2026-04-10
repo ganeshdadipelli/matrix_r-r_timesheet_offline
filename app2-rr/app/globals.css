@@ -1,0 +1,151 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html {
+  font-size: 90%;
+  height: 100%;
+  background-color: #0b111a;
+}
+body {
+  height: 100%;
+  background-color: #0b111a;
+}
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background-color: #0b111a;
+  background-image: 
+    radial-gradient(circle at 10% 20%, rgba(220,180,165,0.05) 0%, transparent 40%),
+    radial-gradient(circle at 80% 80%, rgba(135,165,160,0.05) 0%, transparent 40%);
+  background-attachment: fixed;
+  color: #cbd5e1;
+}
+
+@layer base {
+  * {
+    @apply border-slate-700/50;
+  }
+
+  h1, h2, h3, h4 {
+    @apply tracking-tight font-medium text-slate-100;
+  }
+}
+
+@layer components {
+  /* Meditative, frosted glass effects */
+  
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl bg-indigo-600/90 backdrop-blur-sm px-5 py-2.5 text-sm font-medium text-white shadow-glow transition-all hover:bg-indigo-500 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-[#1b2533]/80 backdrop-blur-md px-5 py-2.5 text-sm font-medium text-slate-200 shadow-xl transition-all hover:bg-[#233144] hover:-translate-y-0.5;
+  }
+
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl bg-red-500/80 backdrop-blur-sm px-5 py-2.5 text-sm font-medium text-white shadow-md transition-all hover:bg-red-500 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .input-field {
+    @apply w-full rounded-2xl border border-slate-700/50 bg-[#141b26]/50 backdrop-blur-md px-4 py-3 text-sm text-slate-100 placeholder:text-slate-500 shadow-inner focus:border-indigo-500 focus:bg-[#1a2331]/80 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all;
+  }
+
+  .card {
+    @apply rounded-3xl border border-white/5 bg-[#1b2533]/80 shadow-[0_8px_40px_rgba(0,0,0,0.2)] backdrop-blur-2xl relative overflow-hidden;
+  }
+
+  /* Optional: a subtle shine on cards for premium feel */
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+    opacity: 0.8;
+  }
+
+  .section-title {
+    @apply text-xl font-medium text-slate-100;
+  }
+
+  .section-subtitle {
+    @apply mt-1 text-sm text-slate-400;
+  }
+
+  .metric-card {
+    @apply rounded-[2rem] border border-white/5 bg-[#17202d] p-6 shadow-xl backdrop-blur-lg transition-transform hover:-translate-y-1;
+  }
+
+  .pill-head {
+    @apply rounded-full border border-primary-500/20 bg-primary-500/10 px-3 py-1 text-xs font-medium text-primary-400 backdrop-blur-md;
+  }
+
+  .pill-manager {
+    @apply rounded-full border border-indigo-400/20 bg-indigo-500/10 px-3 py-1 text-xs font-medium text-indigo-300 backdrop-blur-md;
+  }
+
+  .pill-member {
+    @apply rounded-full border border-cyan-400/20 bg-cyan-500/10 px-3 py-1 text-xs font-medium text-cyan-300 backdrop-blur-md;
+  }
+}
+
+.table-th {
+  @apply px-6 py-4 text-left text-xs font-medium uppercase tracking-widest text-slate-500 bg-transparent;
+}
+
+.table-td {
+  @apply px-6 py-4 text-sm text-slate-300 border-t border-white/5;
+}
+
+/* Scrollbar customization for soft feel */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(180, 200, 195, 0.4);
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(180, 200, 195, 0.7);
+}
+
+.org-map-stage {
+  position: relative;
+  background: transparent;
+}
+
+.org-map-stage:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  border-radius: 0;
+  margin: 0;
+  padding: 0;
+  background: #0b111a;
+}
+
+.org-map-stage:fullscreen .org-map-canvas {
+  height: 100vh !important;
+  min-height: 100vh !important;
+}
+
+.org-map-stage:-webkit-full-screen {
+  width: 100vw;
+  height: 100vh;
+  border-radius: 0;
+  margin: 0;
+  padding: 0;
+  background: #0b111a;
+}
+
+.org-map-stage:-webkit-full-screen .org-map-canvas {
+  height: 100vh !important;
+  min-height: 100vh !important;
+}

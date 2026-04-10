@@ -1,0 +1,189 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL_RR")
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  SUPER_BOSS
+  MANAGER
+  TEAM_MEMBER
+  FIELD_USER
+  ADMIN
+}
+
+model User {
+  id           String      @id @default(uuid())
+  name         String
+  email        String      @unique
+  passwordHash String      @map("password_hash")
+  role         UserRole    @default(TEAM_MEMBER)
+  parentId     String?     @map("parent_id")
+  designation  String?
+  domain       String?
+  districtId   String?     @map("district_id")
+  photoUrl     String?     @map("photo_url")
+  isActive     Boolean     @default(true) @map("is_active")
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+
+  parent       User?       @relation("Hierarchy", fields: [parentId], references: [id])
+  children     User[]      @relation("Hierarchy")
+  rrCategories RRCategory[]
+  kpiProgress  KPIProgress[]
+  timesheets   TimesheetEntry[]
+  district     District?   @relation(fields: [districtId], references: [id])
+  entries      DailyEntry[] @relation("CreatedBy")
+  auditLogs    AuditLog[]
+
+  @@map("users")
+}
+
+model RRCategory {
+  id               String        @id @default(uuid())
+  userId           String        @map("user_id")
+  title            String
+  responsibilities String        @db.Text
+  kpiTargets       String        @map("kpi_targets") @db.Text
+  actionPoints     String?       @map("action_points") @db.Text
+  sortOrder        Int           @default(0) @map("sort_order")
+  createdAt        DateTime      @default(now()) @map("created_at")
+
+  user             User          @relation(fields: [userId], references: [id])
+  kpiProgress      KPIProgress[]
+
+  @@map("rr_categories")
+}
+
+model KPIProgress {
+  id          String      @id @default(uuid())
+  userId      String      @map("user_id")
+  categoryId  String      @map("category_id")
+  week        String
+  achievement String      @db.Text
+  score       Float?
+  notes       String?     @db.Text
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+
+  user        User        @relation(fields: [userId], references: [id])
+  category    RRCategory  @relation(fields: [categoryId], references: [id])
+
+  @@unique([userId, categoryId, week])
+  @@map("kpi_progress")
+}
+
+model TimesheetEntry {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  date        DateTime @db.Date
+  startTime   String   @map("start_time")    // "09:30"
+  endTime     String   @map("end_time")      // "18:30"
+  totalHours  Float    @map("total_hours")
+  tasks       Json     // [{categoryName, hours, description}]
+  isSubmitted Boolean  @default(true) @map("is_submitted")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  user        User     @relation(fields:[userId], references:[id])
+  
+  @@unique([userId, date])
+  @@index([date])
+  @@index([userId])
+  @@map("timesheet_entries")
+}
+
+model District {
+  id        String @id @default(uuid())
+  name      String @unique
+  code      String @unique
+  sortOrder Int    @map("sort_order")
+
+  users   User[]
+  entries DailyEntry[]
+
+  @@map("districts")
+}
+
+model DailyEntry {
+  id          String   @id @default(uuid())
+  date        DateTime @db.Date
+  districtId  String   @map("district_id")
+
+  // Base counts
+  totalCount   Int @map("total_count")
+  onlineCount  Int @map("online_count")
+  offlineCount Int @map("offline_count")
+  onlinePct    Float @map("online_pct")
+  offlinePct   Float @map("offline_pct")
+
+  // Internal Dependencies
+  cat6Cable              Int @default(0) @map("cat6_cable")
+  threeCorepower         Int @default(0) @map("three_core_power")
+  gponIssues             Int @default(0) @map("gpon_issues")
+  ofcIssues              Int @default(0) @map("ofc_issues")
+  cameraStoreReplacement Int @default(0) @map("camera_store_replacement")
+  camerasFluctuating     Int @default(0) @map("cameras_fluctuating")
+  needToCheck            Int @default(0) @map("need_to_check")
+  fiberRequired          Int @default(0) @map("fiber_required")
+  hydraLadder            Int @default(0) @map("hydra_ladder")
+  mcbIssue               Int @default(0) @map("mcb_issue")
+  switch8portIssue       Int @default(0) @map("switch_8port_issue")
+
+  // External Dependencies
+  roadExtensionConstruction Int @default(0) @map("road_extension_construction")
+  noOlt                     Int @default(0) @map("no_olt")
+  popDown                   Int @default(0) @map("pop_down")
+  jbAccident                Int @default(0) @map("jb_accident")
+  renovation                Int @default(0) @map("renovation")
+  powerDisconnection        Int @default(0) @map("power_disconnection")
+  dgpOffice                 Int @default(0) @map("dgp_office")
+  needPeerIp                Int @default(0) @map("need_peer_ip")
+
+  // Totals
+  internalSum   Int  @default(0) @map("internal_sum")
+  externalSum   Int  @default(0) @map("external_sum")
+  dependencySum Int  @default(0) @map("dependency_sum")
+  isValidated   Boolean @default(false) @map("is_validated")
+
+  // Lock fields
+  isLocked  Boolean   @default(false) @map("is_locked")
+  lockedAt  DateTime? @map("locked_at")
+
+  // Audit
+  createdById String   @map("created_by_id")
+  updatedById String?  @map("updated_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  district  District @relation(fields: [districtId], references: [id])
+  createdBy User     @relation("CreatedBy", fields: [createdById], references: [id])
+
+  @@unique([date, districtId])
+  @@index([date])
+  @@index([districtId])
+  @@map("daily_entries")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  action     String
+  resource   String?
+  resourceId String?  @map("resource_id")
+  oldData    Json?    @map("old_data")
+  newData    Json?    @map("new_data")
+  ipAddress  String?  @map("ip_address")
+  userAgent  String?  @map("user_agent")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
