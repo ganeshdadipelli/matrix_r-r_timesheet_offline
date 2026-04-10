@@ -37,8 +37,6 @@ const NAV_BY_ROLE: Record<string, NavItem[]> = {
     { href: '/timesheet-summary', label: 'Work Execution Reports', icon: TableProperties },
     { href: '/insights', label: 'ML Insights', icon: BrainCircuit },
     { href: '/rr', label: 'Role Matrix', icon: Settings2 },
-    { href: '/offline-dashboard', label: 'Offline Dashboard', icon: BarChart3 },
-    { href: '/offline-data-tools', label: 'Offline Data Tools', icon: Download },
   ],
   SUPER_BOSS: [
     { href: '/dashboard', label: 'Platform Overview', icon: FileText },
@@ -48,8 +46,6 @@ const NAV_BY_ROLE: Record<string, NavItem[]> = {
     { href: '/timesheet-summary', label: 'Work Execution Reports', icon: TableProperties },
     { href: '/insights', label: 'ML Insights', icon: BrainCircuit },
     { href: '/rr', label: 'Role Matrix', icon: Settings2 },
-    { href: '/offline-dashboard', label: 'Offline Dashboard', icon: BarChart3 },
-    { href: '/offline-data-tools', label: 'Offline Data Tools', icon: Download },
   ],
   MANAGER: [
     { href: '/dashboard', label: 'Platform Overview', icon: FileText },
@@ -59,8 +55,6 @@ const NAV_BY_ROLE: Record<string, NavItem[]> = {
     { href: '/timesheet-summary', label: 'Work Execution Reports', icon: TableProperties },
     { href: '/insights', label: 'ML Insights', icon: BrainCircuit },
     { href: '/rr', label: 'Role Matrix', icon: Settings2 },
-    { href: '/offline-dashboard', label: 'Offline Dashboard', icon: BarChart3 },
-    { href: '/offline-data-tools', label: 'Offline Data Tools', icon: Download },
   ],
   TEAM_MEMBER: [
     { href: '/dashboard', label: 'Platform Overview', icon: FileText },
@@ -69,13 +63,12 @@ const NAV_BY_ROLE: Record<string, NavItem[]> = {
     { href: '/rr', label: 'Role Matrix', icon: Settings2 },
   ],
   FIELD_USER: [
-    { href: '/offline-dashboard', label: 'Offline Dashboard', icon: BarChart3 },
     { href: '/offline-entry', label: 'Data Entry', icon: ClipboardEdit },
     { href: '/offline-entry/history', label: 'History', icon: HistoryIcon },
   ],
   ADMIN: [
-    { href: '/offline-dashboard', label: 'Offline Dashboard', icon: BarChart3 },
-    { href: '/offline-data-tools', label: 'Offline Data Tools', icon: Download },
+    { href: '/offline-entry', label: 'Data Entry', icon: ClipboardEdit },
+    { href: '/offline-entry/history', label: 'History', icon: HistoryIcon },
   ]
 };
 

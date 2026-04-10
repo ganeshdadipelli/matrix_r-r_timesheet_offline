@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const PROTECTED = ['/dashboard', '/team', '/admin', '/rr', '/timesheet', '/timesheet-summary', '/insights', '/kpi', '/offline-dashboard', '/offline-entry', '/offline-data-tools'];
+const PROTECTED = ['/dashboard', '/team', '/admin', '/rr', '/timesheet', '/timesheet-summary', '/insights', '/kpi', '/offline-entry'];
 const AUTH_ROUTES = ['/login'];
 
 export function middleware(req: NextRequest) {
@@ -25,7 +25,7 @@ export const config = {
   matcher: [
     '/dashboard/:path*', '/team/:path*', '/admin/:path*', '/rr/:path*',
     '/timesheet/:path*', '/timesheet-summary/:path*', '/insights/:path*', '/kpi/:path*',
-    '/offline-dashboard/:path*', '/offline-entry/:path*', '/offline-data-tools/:path*',
+    '/offline-entry/:path*',
     '/login',
   ],
 };

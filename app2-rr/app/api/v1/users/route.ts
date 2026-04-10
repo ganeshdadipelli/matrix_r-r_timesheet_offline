@@ -173,12 +173,10 @@ export async function GET(req: NextRequest) {
       where.role = { in: roleValues as UserRole[] };
     }
   } else {
-    if (auth.role === 'SUPER_BOSS') {
-      where.OR = [{ parentId: auth.userId }, { parent: { parentId: auth.userId } }];
+    if (auth.role === 'SUPER_BOSS' || auth.role === 'SUPER_ADMIN') {
+      // no filter — see all for mapping transparency
     } else if (auth.role === 'MANAGER') {
       where.parentId = auth.userId;
-    } else if (auth.role === 'SUPER_ADMIN') {
-      // no filter — see all
     } else {
       where.id = auth.userId;
     }
@@ -376,27 +374,40 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ success: false, error: 'User id is required' }, { status: 400 });
   }
 
-  const allowed = await canManageUser(auth, id);
-  if (!allowed) {
-    return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
-  }
+  try {
+    const allowed = await canManageUser(auth, id);
+    if (!allowed) {
+      return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
+    }
 
-  const childCount = await prisma.user.count({
-    where: { parentId: id },
-  });
+    const childCount = await prisma.user.count({
+      where: { parentId: id },
+    });
 
-  if (childCount > 0) {
+    if (childCount > 0) {
+      return NextResponse.json(
+        { success: false, error: 'Delete team members first before deleting this user' },
+        { status: 400 }
+      );
+    }
+
+    await prisma.$transaction(async tx => {
+      // Clean up all related data to avoid FK constraints
+      await tx.kPIProgress.deleteMany({ where: { userId: id } });
+      await tx.rRCategory.deleteMany({ where: { userId: id } });
+      await tx.timesheetEntry.deleteMany({ where: { userId: id } });
+      await tx.auditLog.deleteMany({ where: { userId: id } });
+      await tx.dailyEntry.deleteMany({ where: { createdById: id } });
+      
+      await tx.user.delete({ where: { id } });
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    console.error('USER_DELETE_ERROR', error);
     return NextResponse.json(
-      { success: false, error: 'Delete team members first before deleting this user' },
-      { status: 400 }
+      { success: false, error: error?.message || 'Server error' },
+      { status: 500 }
     );
   }
-
-  await prisma.$transaction(async tx => {
-    await tx.kPIProgress.deleteMany({ where: { userId: id } });
-    await tx.rRCategory.deleteMany({ where: { userId: id } });
-    await tx.user.delete({ where: { id } });
-  });
-
-  return NextResponse.json({ success: true });
 }

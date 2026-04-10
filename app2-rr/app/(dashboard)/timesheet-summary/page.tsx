@@ -1,12 +1,39 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { apiFetch } from '@/lib/utils/apiFetch';
 import { getSessionUser } from '@/lib/utils/session';
-import { Calendar, CheckCircle2, Clock4, FileText, Search, TableProperties, XCircle, Users } from 'lucide-react';
+import { 
+  Calendar, 
+  CheckCircle2, 
+  Clock4, 
+  FileText, 
+  Search, 
+  TableProperties, 
+  XCircle, 
+  Users,
+  LayoutGrid,
+  TrendingUp,
+  AlertCircle,
+  Briefcase
+} from 'lucide-react';
 
-type TimesheetEntry = { id: string; startTime: string; endTime: string; totalHours: number; tasks: { taskDesc: string, categoryId: string }[]; };
-type UserSummary = { id: string; name: string; role: string; designation: string | null; parentId: string | null; timesheets: TimesheetEntry[]; };
+type TimesheetEntry = { 
+  id: string; 
+  startTime: string; 
+  endTime: string; 
+  totalHours: number; 
+  tasks: { categoryName: string, hours: number, description?: string, taskDesc?: string }[]; 
+};
+
+type UserSummary = { 
+  id: string; 
+  name: string; 
+  role: string; 
+  designation: string | null; 
+  parentId: string | null; 
+  timesheets: TimesheetEntry[]; 
+};
 
 export default function TimesheetSummaryPage() {
   const sessionUser = getSessionUser();
@@ -18,10 +45,12 @@ export default function TimesheetSummaryPage() {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<UserSummary[]>([]);
   const [error, setError] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     async function load() {
       setLoading(true);
+      setError('');
       try {
         const d = new Date(date);
         const res = await apiFetch(`/api/v1/timesheet/summary?date=${d.toISOString()}`);
@@ -37,159 +66,276 @@ export default function TimesheetSummaryPage() {
     load();
   }, [date]);
 
-  // Group data logically for the view
-  const myData = data.find(u => u.id === sessionUser?.id);
-  const managers = data.filter(u => u.role === 'MANAGER');
-  
-  // Create hierarchy grouping
-  const mappedGroups = managers.map(mgr => {
-    return {
-      manager: mgr,
-      members: data.filter(u => u.parentId === mgr.id)
-    };
-  });
+  const filteredData = useMemo(() => {
+    if (!searchQuery) return data;
+    return data.filter(u => u.name.toLowerCase().includes(searchQuery.toLowerCase()));
+  }, [data, searchQuery]);
 
-  // Include direct members of Super Boss
-  const directMembers = data.filter(u => u.role === 'TEAM_MEMBER' && u.parentId === sessionUser?.id);
+  const stats = useMemo(() => {
+    const total = data.length;
+    const submitted = data.filter(u => u.timesheets?.length > 0).length;
+    const avgHours = submitted > 0 
+      ? data.reduce((acc, u) => acc + (u.timesheets?.[0]?.totalHours || 0), 0) / submitted 
+      : 0;
+    return { total, submitted, avgHours };
+  }, [data]);
+
+  const myData = filteredData.find(u => u.id === sessionUser?.id);
+  const managers = filteredData.filter(u => u.role === 'MANAGER');
+  
+  const mappedGroups = managers.map(mgr => ({
+    manager: mgr,
+    members: filteredData.filter(u => u.parentId === mgr.id)
+  }));
+
+  const directMembers = filteredData.filter(u => u.role === 'TEAM_MEMBER' && u.parentId === sessionUser?.id);
 
   function TimeCard({ user }: { user: UserSummary }) {
     const ts = user.timesheets?.[0];
     
     if (!ts) {
       return (
-        <div className="flex bg-[#111823] p-4 rounded-2xl border border-red-900/30">
+        <div className="group flex bg-[#0c121d] p-5 rounded-3xl border border-red-500/10 hover:border-red-500/20 transition-all">
            <div className="flex-1">
-             <div className="flex items-center gap-2 mb-1">
-               <h4 className="font-bold text-slate-200">{user.name}</h4>
-               <span className="text-[10px] font-mono text-slate-500 uppercase">{user.designation || user.role}</span>
+             <div className="flex items-center gap-3 mb-2">
+               <div className="h-10 w-10 rounded-2xl bg-red-500/10 flex items-center justify-center text-red-500">
+                 <XCircle className="h-5 w-5" />
+               </div>
+               <div>
+                 <h4 className="font-bold text-slate-200 leading-tight">{user.name}</h4>
+                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">{user.designation || user.role}</p>
+               </div>
              </div>
-             <p className="text-sm text-red-400 flex items-center gap-1.5 font-medium"><XCircle className="h-4 w-4" /> Not logged for this date</p>
+             <div className="mt-3 py-2 px-3 rounded-xl bg-red-500/5 inline-flex items-center gap-2 border border-red-500/10">
+                <AlertCircle className="h-3.5 w-3.5 text-red-400" />
+                <span className="text-xs font-bold text-red-400/80">Missing Report</span>
+             </div>
            </div>
         </div>
       );
     }
 
     return (
-      <div className="flex flex-col bg-[#151c27] p-5 rounded-2xl border border-[#2d3a4d] shadow-sm">
-         <div className="flex justify-between items-start mb-4">
-           <div>
-             <div className="flex items-center gap-2 mb-1">
-               <h4 className="font-bold text-white text-lg">{user.name}</h4>
-               <span className="text-[10px] font-mono text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded-full uppercase">{user.designation || user.role}</span>
+      <div className="flex flex-col bg-[#0c121d] p-0 rounded-[2rem] border border-white/5 shadow-2xl overflow-hidden group hover:border-indigo-500/30 transition-all duration-300">
+         <div className="p-6 bg-gradient-to-br from-[#151c27] to-[#0c121d] border-b border-white/5">
+           <div className="flex justify-between items-start">
+             <div className="flex items-center gap-4">
+               <div className="h-12 w-12 rounded-[1.2rem] bg-indigo-500/20 border border-indigo-500/20 flex items-center justify-center text-indigo-400 shadow-inner group-hover:scale-110 transition-transform">
+                 <Users className="h-6 w-6" />
+               </div>
+               <div>
+                 <h4 className="font-black text-white text-lg tracking-tight">{user.name}</h4>
+                 <div className="flex items-center gap-2 mt-1">
+                    <span className="text-[9px] font-black uppercase tracking-widest text-indigo-300 bg-indigo-500/10 px-2.5 py-1 rounded-full border border-indigo-500/20">{user.designation || user.role}</span>
+                    <span className="h-1 w-1 rounded-full bg-slate-700" />
+                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Daily Report</span>
+                 </div>
+               </div>
              </div>
-             <div className="flex items-center gap-4 text-xs font-semibold text-slate-400 mt-2">
-               <span className="flex items-center gap-1"><Clock4 className="h-3.5 w-3.5 text-emerald-400" /> {ts.startTime} - {ts.endTime}</span>
-               <span className="flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5 text-indigo-400" /> {ts.totalHours.toFixed(1)} Hours Total</span>
+             <div className="text-right">
+                <div className="px-3 py-1.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+                  <span className="text-[10px] font-bold block uppercase tracking-tighter opacity-70">Logged Hours</span>
+                  <span className="text-lg font-black">{ts.totalHours.toFixed(1)}</span>
+                </div>
+             </div>
+           </div>
+           
+           <div className="flex items-center gap-6 mt-6 pt-4 border-t border-white/5">
+             <div className="flex items-center gap-2">
+               <div className="p-1.5 rounded-lg bg-slate-800 text-slate-400"><Clock4 className="h-3.5 w-3.5" /></div>
+               <div>
+                 <p className="text-[9px] font-black uppercase tracking-widest text-slate-500 italic">Timeline</p>
+                 <p className="text-xs font-bold text-slate-200">{ts.startTime} - {ts.endTime}</p>
+               </div>
+             </div>
+             <div className="flex items-center gap-2">
+               <div className="p-1.5 rounded-lg bg-slate-800 text-slate-400"><LayoutGrid className="h-3.5 w-3.5" /></div>
+               <div>
+                 <p className="text-[9px] font-black uppercase tracking-widest text-slate-500 italic">Deliverables</p>
+                 <p className="text-xs font-bold text-slate-200">{ts.tasks?.length || 0} Task Areas</p>
+               </div>
              </div>
            </div>
          </div>
 
-         <div className="space-y-2 mt-2">
-             <p className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-2">Tasks Executed</p>
-             {ts.tasks.map((task: any, idx: number) => (
-               <div key={idx} className="bg-[#1b2533] border border-[#2d3a4d] rounded-xl p-3 flex items-start gap-3">
-                  <div className="mt-1 h-2 w-2 rounded-full bg-indigo-500 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <span className="text-sm font-bold text-slate-200">{task.categoryName || 'Task'}</span>
-                      {task.hours && <span className="text-[10px] font-mono font-bold text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded-full">{task.hours}h</span>}
-                    </div>
-                    <p className="text-sm text-slate-400 leading-relaxed">{task.description || task.taskDesc || '—'}</p>
-                  </div>
-               </div>
-             ))}
-             {ts.tasks.length === 0 && <p className="text-sm text-slate-500 italic">No task descriptions detailed.</p>}
+         <div className="p-6 space-y-3 bg-[#080d16]/30">
+            {ts.tasks.map((task: any, idx: number) => (
+              <div key={idx} className="bg-[#111823]/50 border border-white/5 rounded-2xl p-4 transition hover:bg-[#151c27] hover:border-white/10 shadow-sm relative overflow-hidden group/task">
+                 <div className="absolute top-0 left-0 w-1 h-full bg-indigo-500/30 group-hover/task:bg-indigo-500 transition-colors" />
+                 <div className="flex justify-between items-start gap-4 mb-2">
+                   <h5 className="text-sm font-black text-slate-100 uppercase tracking-tight">{task.categoryName || 'General Workflow'}</h5>
+                   {task.hours > 0 && <span className="text-[10px] font-black text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-lg border border-indigo-500/10">{task.hours}h</span>}
+                 </div>
+                 <p className="text-xs text-slate-400 leading-relaxed font-medium">
+                   {task.description || task.taskDesc || 'No detailed log provided for this scope.'}
+                 </p>
+              </div>
+            ))}
+            {(!ts.tasks || ts.tasks.length === 0) && (
+              <div className="py-8 text-center border border-dashed border-white/5 rounded-2xl">
+                <FileText className="h-8 w-8 text-slate-700 mx-auto mb-2" />
+                <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Minimal Task Log</p>
+              </div>
+            )}
          </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500 max-w-6xl mx-auto">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-[#151c27] p-8 rounded-3xl border border-[#2d3a4d] shadow-xl">
-        <div>
-          <div className="flex items-center gap-3">
-             <div className="bg-indigo-500/20 p-2.5 rounded-2xl border border-indigo-500/30">
-               <TableProperties className="h-6 w-6 text-indigo-400" />
-             </div>
-             <h1 className="text-2xl font-black text-white">Execution Summary</h1>
-          </div>
-          <p className="mt-2 text-sm text-slate-400">Review timesheets, tracking, and daily execution across all workflows.</p>
-        </div>
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 max-w-7xl mx-auto pb-20">
+      {/* Header & Filter Section */}
+      <section className="bg-[#0c121d] p-8 rounded-[2.5rem] border border-white/5 shadow-2xl relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-600/5 blur-[100px] -mr-32 -mt-32 rounded-full" />
+        <div className="absolute bottom-0 left-0 w-64 h-64 bg-blue-600/5 blur-[100px] -ml-32 -mb-32 rounded-full" />
         
-        <div className="flex flex-col gap-2">
-          <label className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
-             <Calendar className="h-4 w-4" /> Select Execution Date
-          </label>
-          <input 
-            type="date" 
-            value={date} 
-            max={new Date().toISOString().split('T')[0]}
-            onChange={e => setDate(e.target.value)} 
-            className="bg-[#0b111a] border border-[#2d3a4d] text-white px-4 py-3 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition outline-none cursor-pointer"
-          />
+        <div className="relative flex flex-col xl:flex-row xl:items-center justify-between gap-8">
+          <div className="flex-1">
+            <div className="flex items-center gap-4">
+               <div className="h-14 w-14 rounded-[1.5rem] bg-gradient-to-br from-indigo-600 to-indigo-800 flex items-center justify-center text-white shadow-[0_10px_30px_-10px_rgba(79,70,229,0.5)]">
+                 <TableProperties className="h-7 w-7" />
+               </div>
+               <div>
+                  <h1 className="text-3xl font-black text-white tracking-tight leading-none">Execution Reports</h1>
+                  <p className="mt-2 text-sm text-slate-400 font-medium">Monitoring and analyzing daily work delivery across structural hierarchy.</p>
+               </div>
+            </div>
+          </div>
+          
+          <div className="flex flex-col sm:flex-row items-stretch gap-4">
+            <div className="flex flex-col gap-2 min-w-[200px]">
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">Reporting Date</label>
+              <div className="group relative">
+                <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-indigo-400 transition" />
+                <input 
+                  type="date" 
+                  value={date} 
+                  max={new Date().toISOString().split('T')[0]}
+                  onChange={e => setDate(e.target.value)} 
+                  className="w-full bg-[#151c27] border border-white/5 text-white pl-11 pr-4 py-3.5 rounded-2xl focus:border-indigo-500/50 focus:ring-4 focus:ring-indigo-500/10 transition outline-none cursor-pointer font-bold text-sm"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 min-w-[280px]">
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">Filter Members</label>
+              <div className="group relative">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-indigo-400 transition" />
+                <input 
+                  type="text"
+                  placeholder="Search by name..."
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  className="w-full bg-[#151c27] border border-white/5 text-white pl-11 pr-4 py-3.5 rounded-2xl focus:border-indigo-500/50 focus:ring-4 focus:ring-indigo-500/10 transition outline-none font-bold text-sm"
+                />
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
+
+        {/* Dash Summary Metrics */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-12 relative">
+          {[
+            { label: 'Total Strength', val: stats.total, icon: Users, color: 'text-blue-400', bg: 'bg-blue-500/10' },
+            { label: 'Reports Logged', val: stats.submitted, icon: CheckCircle2, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
+            { label: 'Active Compliance', val: stats.total > 0 ? `${Math.round((stats.submitted/stats.total)*100)}%` : '0%', icon: TrendingUp, color: 'text-indigo-400', bg: 'bg-indigo-500/10' },
+            { label: 'Avg Prod. Hours', val: stats.avgHours.toFixed(1), icon: Clock4, color: 'text-amber-400', bg: 'bg-amber-500/10' },
+          ].map((stat, i) => (
+            <div key={i} className="bg-white/[0.02] border border-white/5 p-5 rounded-[1.8rem] hover:bg-white/[0.04] transition group">
+              <div className={`p-2.5 rounded-xl ${stat.bg} ${stat.color} w-fit mb-4 group-hover:scale-110 transition`}>
+                <stat.icon className="h-5 w-5" />
+              </div>
+              <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">{stat.label}</p>
+              <p className="text-2xl font-black text-white mt-1 tracking-tighter">{stat.val}</p>
+            </div>
+          ))}
+        </div>
+      </section>
 
       {loading ? (
         <div className="flex min-h-[40vh] items-center justify-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-500 border-t-transparent" />
+          <div className="h-12 w-12 animate-spin rounded-[0.8rem] border-4 border-indigo-500 border-t-transparent shadow-xl shadow-indigo-500/20" />
         </div>
       ) : error ? (
-        <div className="card p-8 border-red-900/50 text-red-500 font-bold text-center">{error}</div>
+        <div className="bg-red-500/10 border border-red-500/20 p-10 rounded-[2rem] text-red-500 font-black text-center shadow-xl">
+          <AlertCircle className="h-10 w-10 mx-auto mb-4 opacity-50" />
+          <p className="text-xl tracking-tight">{error}</p>
+        </div>
       ) : (
-        <div className="space-y-8">
+        <div className="grid grid-cols-1 gap-12 mt-8">
           
           {/* DC Head / Self Section */}
           {myData && (
-            <section>
-               <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2 border-b border-[#2d3a4d] pb-2">
-                 <span className="bg-emerald-500/10 text-emerald-400 p-1 rounded-md"><FileText className="h-4 w-4" /></span> 
-                 Your Execution
-               </h2>
-               <div className="pl-0"><TimeCard user={myData} /></div>
-            </section>
-          )}
-
-          {/* Direct Members */}
-          {directMembers.length > 0 && (
-            <section>
-               <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2 border-b border-[#2d3a4d] pb-2">
-                 <span className="bg-blue-500/10 text-blue-400 p-1 rounded-md"><Users className="h-4 w-4" /></span> 
-                 Direct Reports
-               </h2>
-               <div className="space-y-4">
-                 {directMembers.map(member => <TimeCard key={member.id} user={member} />)}
+            <section className="animate-in fade-in duration-1000">
+               <div className="flex items-center gap-4 mb-6">
+                 <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center text-white shadow-lg shadow-emerald-500/20">
+                   <Briefcase className="h-4 w-4" />
+                 </div>
+                 <h2 className="text-xl font-black text-white tracking-tight uppercase">Your Delivery Profile</h2>
+               </div>
+               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                 <TimeCard user={myData} />
                </div>
             </section>
           )}
 
-          {/* Managers & Their Teams */}
-          {mappedGroups.map((group) => (
-            <section key={group.manager.id} className="bg-[#0b111a] border border-[#2d3a4d]/50 p-6 rounded-3xl">
-               <h2 className="text-xl font-black text-indigo-100 mb-6 flex items-center gap-2">
-                 Manager Workspace: {group.manager.name}
-               </h2>
-               <div className="space-y-6">
-                 <div>
-                   <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3 px-2">Manager Timesheet</p>
-                   <TimeCard user={group.manager} />
+          {/* Managers & Their Teams (Workspace View) */}
+          {mappedGroups.map((group, gi) => (
+            <section key={group.manager.id} className={`space-y-8 animate-in fade-in duration-1000`} style={{ animationDelay: `${gi * 150}ms` }}>
+               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/5 pb-4">
+                 <div className="flex items-center gap-4">
+                    <div className="h-10 w-10 rounded-2xl bg-indigo-500/20 flex items-center justify-center text-indigo-400">
+                      <LayoutGrid className="h-5 w-5" />
+                    </div>
+                    <h2 className="text-2xl font-black text-indigo-100 tracking-tight">Manager: {group.manager.name}</h2>
+                 </div>
+                 <span className="px-5 py-2 rounded-full bg-white/5 border border-white/10 text-xs font-black text-slate-400 uppercase tracking-widest">
+                    Scope: {group.members.length} Reports
+                 </span>
+               </div>
+
+               <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-8">
+                 <div className="lg:col-span-2 xl:col-span-1">
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 mb-4 px-2">Manager Oversight</p>
+                    <TimeCard user={group.manager} />
                  </div>
                  
-                 <div className="pl-6 border-l-2 border-[#1b2533]">
-                   <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3 px-2">Team Execution ({group.members.length})</p>
-                   <div className="space-y-4">
-                     {group.members.map(member => <TimeCard key={member.id} user={member} />)}
-                     {group.members.length === 0 && <p className="text-sm text-slate-500 italic p-3">No team members mapped.</p>}
-                   </div>
+                 <div className="lg:col-span-2 xl:col-span-2 bg-[#080d16]/20 p-8 rounded-[2.5rem] border border-white/5">
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 mb-6 px-2">Operational Execution Log</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {group.members.map(member => <TimeCard key={member.id} user={member} />)}
+                      {group.members.length === 0 && (
+                        <div className="md:col-span-2 py-16 text-center border-2 border-dashed border-white/5 rounded-[2rem]">
+                           <Users className="h-12 w-12 text-slate-800 mx-auto mb-4" />
+                           <p className="text-sm font-black text-slate-600 uppercase tracking-widest">No assigned team members</p>
+                        </div>
+                      )}
+                    </div>
                  </div>
                </div>
             </section>
           ))}
 
-          {mappedGroups.length === 0 && directMembers.length === 0 && (!myData) && (
-            <div className="text-center p-12 text-slate-400 border border-dashed border-[#2d3a4d] rounded-3xl">
-              No structural timesheet data accessible for this scope.
+          {/* Direct Members Side Section */}
+          {directMembers.length > 0 && (
+            <section className="pt-8 animate-in fade-in duration-1000">
+               <div className="flex items-center gap-4 mb-8">
+                 <div className="h-10 w-10 rounded-2xl bg-blue-500/20 flex items-center justify-center text-blue-400">
+                   <Users className="h-5 w-5" />
+                 </div>
+                 <h2 className="text-2xl font-black text-white tracking-tight">Direct Execution Control</h2>
+               </div>
+               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8 p-10 bg-blue-500/[0.02] border border-blue-500/10 rounded-[3rem]">
+                 {directMembers.map(member => <TimeCard key={member.id} user={member} />)}
+               </div>
+            </section>
+          )}
+
+          {mappedGroups.length === 0 && directMembers.length === 0 && (!myData) && !loading && (
+            <div className="text-center py-32 bg-[#0c121d] border border-dashed border-[#2d3a4d] rounded-[3rem] shadow-2xl">
+              <Search className="h-16 w-16 text-slate-800 mx-auto mb-6" />
+              <h3 className="text-2xl font-black text-slate-300 tracking-tight">Scope Boundary Exhausted</h3>
+              <p className="text-slate-500 mt-2 font-medium">No results match your search or current scope. Try a different date.</p>
             </div>
           )}
 
@@ -198,3 +344,4 @@ export default function TimesheetSummaryPage() {
     </div>
   );
 }
+
