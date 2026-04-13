@@ -10,12 +10,6 @@ import {
   FileText,
   Shield,
   Users,
-  Wifi,
-  WifiOff,
-  ExternalLink,
-  AlertCircle,
-  RefreshCw,
-  Monitor,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -65,25 +59,6 @@ export default function DashboardPage() {
   const [error, setError] = useState('');
   const [openManagers, setOpenManagers] = useState<Record<string, boolean>>({});
 
-  // Matrix-dashboard offline summary state
-  const [matrixData, setMatrixData] = useState<any[] | null>(null);
-  const [matrixLoading, setMatrixLoading] = useState(false);
-  const [matrixError, setMatrixError] = useState('');
-
-  function loadMatrixSummary() {
-    setMatrixLoading(true);
-    setMatrixError('');
-    const today = new Date().toISOString().split('T')[0];
-    apiFetch(`/api/v1/matrix-summary?date=${today}`)
-      .then(r => r.json())
-      .then(json => {
-        if (json.success) setMatrixData(json.data || []);
-        else setMatrixError(json.error || 'Offline dashboard unavailable');
-      })
-      .catch(() => setMatrixError('Matrix dashboard is offline'))
-      .finally(() => setMatrixLoading(false));
-  }
-
   useEffect(() => {
     apiFetch('/api/v1/hierarchy')
       .then(res => res.json())
@@ -96,9 +71,6 @@ export default function DashboardPage() {
       })
       .catch(() => setError('Network error'))
       .finally(() => setLoading(false));
-
-    // Auto-load matrix summary
-    loadMatrixSummary();
   }, []);
 
   const allManagers = useMemo(() => {
@@ -331,128 +303,6 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      {/* ═══════ Offline Dependency Summary (from Matrix Dashboard) ═══════ */}
-      <section className="card p-6">
-        <div className="flex items-center justify-between mb-5">
-          <div>
-            <h2 className="section-title flex items-center gap-2">
-              <Monitor className="h-5 w-5 text-amber-500" />
-              Field Offline Dashboard — Today&apos;s Summary
-            </h2>
-            <p className="section-subtitle">Live feed from Matrix Smart Field Dashboard</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={loadMatrixSummary}
-              disabled={matrixLoading}
-              className="flex items-center gap-1.5 rounded-xl border border-[#2d3a4d] bg-[#1b2533] px-3 py-2 text-xs font-bold text-slate-300 hover:bg-[#222f42] transition disabled:opacity-50"
-            >
-              <RefreshCw className={`h-3.5 w-3.5 ${matrixLoading ? 'animate-spin' : ''}`} />
-              Refresh
-            </button>
-            <Link
-              href={`${process.env.NEXT_PUBLIC_MATRIX_URL || 'http://localhost:3000'}/dashboard`}
-              target="_blank"
-              className="flex items-center gap-1.5 rounded-xl border border-[#2d3a4d] bg-[#1b2533] px-3 py-2 text-xs font-bold text-slate-300 hover:bg-[#222f42] transition"
-            >
-              <ExternalLink className="h-3.5 w-3.5" /> Open Dashboard
-            </Link>
-          </div>
-        </div>
-
-        {matrixLoading && (
-          <div className="py-12 flex justify-center">
-            <RefreshCw className="h-6 w-6 text-amber-500 animate-spin" />
-          </div>
-        )}
-
-        {!matrixLoading && matrixError && (
-          <div className="rounded-2xl border border-amber-900/30 bg-amber-900/10 p-5 flex items-center gap-3">
-            <AlertCircle className="h-5 w-5 text-amber-500 shrink-0" />
-            <div>
-              <p className="text-sm font-bold text-amber-400">{matrixError}</p>
-              <p className="text-xs text-slate-500 mt-0.5">Ensure the Matrix Field Dashboard is running at port 3000</p>
-            </div>
-          </div>
-        )}
-
-        {!matrixLoading && !matrixError && matrixData !== null && (
-          <>
-            {matrixData.length === 0 ? (
-              <div className="py-10 text-center text-slate-500 text-sm">No field entries submitted for today yet.</div>
-            ) : (
-              <>
-                {/* Grand Totals */}
-                {(() => {
-                  const totals = matrixData.reduce((a: any, e: any) => ({
-                    total: a.total + (e.totalCount || 0),
-                    online: a.online + (e.onlineCount || 0),
-                    offline: a.offline + (e.offlineCount || 0),
-                    internal: a.internal + (e.internalSum || 0),
-                    external: a.external + (e.externalSum || 0),
-                  }), { total: 0, online: 0, offline: 0, internal: 0, external: 0 });
-                  const pct = totals.total ? ((totals.offline / totals.total) * 100).toFixed(1) : '0';
-                  return (
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">
-                      {[
-                        { label: 'Total Cameras', val: totals.total.toLocaleString(), icon: Monitor, color: 'text-slate-300' },
-                        { label: 'Online', val: totals.online.toLocaleString(), icon: Wifi, color: 'text-emerald-400' },
-                        { label: 'Offline', val: totals.offline.toLocaleString(), icon: WifiOff, color: 'text-red-400' },
-                        { label: 'Offline %', val: `${pct}%`, icon: AlertCircle, color: 'text-amber-400' },
-                        { label: 'Districts', val: `${matrixData.length}`, icon: Users, color: 'text-blue-400' },
-                      ].map(m => (
-                        <div key={m.label} className="rounded-2xl border border-[#2d3a4d] bg-[#151c27] p-3 flex items-center gap-3">
-                          <m.icon className={`h-5 w-5 ${m.color} shrink-0`} />
-                          <div>
-                            <p className="text-xs text-slate-500 font-semibold uppercase tracking-wide">{m.label}</p>
-                            <p className={`text-xl font-black ${m.color}`}>{m.val}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  );
-                })()}
-
-                {/* Per-District Table */}
-                <div className="rounded-2xl border border-[#2d3a4d] overflow-hidden">
-                  <table className="min-w-full">
-                    <thead className="bg-[#111823]">
-                      <tr>
-                        {['District', 'Total', 'Online', 'Offline', 'Offline %', 'Int.Dep', 'Ext.Dep'].map(h => (
-                          <th key={h} className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#1b2533]">
-                      {matrixData.map((e: any) => {
-                        const offPct = e.offlinePct || 0;
-                        const barColor = offPct < 10 ? 'bg-emerald-500' : offPct < 15 ? 'bg-yellow-500' : offPct < 20 ? 'bg-orange-500' : 'bg-red-500';
-                        const textColor = offPct < 10 ? 'text-emerald-400' : offPct < 15 ? 'text-yellow-400' : offPct < 20 ? 'text-orange-400' : 'text-red-400';
-                        return (
-                          <tr key={e.id} className="hover:bg-[#1b2533] transition">
-                            <td className="px-4 py-3">
-                              <p className="text-sm font-semibold text-slate-200">{e.district?.name || '—'}</p>
-                              <div className="mt-1 h-1 w-24 bg-[#2d3a4d] rounded-full overflow-hidden">
-                                <div className={`h-full ${barColor} rounded-full`} style={{ width: `${Math.min(offPct, 100)}%` }} />
-                              </div>
-                            </td>
-                            <td className="px-4 py-3 font-mono text-sm text-slate-300">{e.totalCount?.toLocaleString()}</td>
-                            <td className="px-4 py-3 font-mono text-sm text-emerald-400 font-bold">{e.onlineCount?.toLocaleString()}</td>
-                            <td className="px-4 py-3 font-mono text-sm text-red-400 font-bold">{e.offlineCount?.toLocaleString()}</td>
-                            <td className={`px-4 py-3 font-mono text-sm font-bold ${textColor}`}>{offPct.toFixed(1)}%</td>
-                            <td className="px-4 py-3 font-mono text-sm text-amber-400">{e.internalSum}</td>
-                            <td className="px-4 py-3 font-mono text-sm text-teal-400">{e.externalSum}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </>
-            )}
-          </>
-        )}
-      </section>
     </div>
   );
 }

@@ -15,8 +15,11 @@ import {
   LayoutGrid,
   TrendingUp,
   AlertCircle,
-  Briefcase
+  Briefcase,
+  History as HistoryIcon,
+  Download,
 } from 'lucide-react';
+import ExcelJS from 'exceljs';
 
 type TimesheetEntry = { 
   id: string; 
@@ -182,6 +185,83 @@ export default function TimesheetSummaryPage() {
     );
   }
 
+  async function exportToExcel() {
+    if (!filteredData.length) return;
+    
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet(`Execution Report - ${date}`);
+
+    // Define Columns
+    worksheet.columns = [
+      { header: 'Tactical Identity', key: 'name', width: 25 },
+      { header: 'Designation', key: 'designation', width: 20 },
+      { header: 'Daily Start', key: 'start', width: 12 },
+      { header: 'Daily End', key: 'end', width: 12 },
+      { header: 'Total Hours', key: 'total', width: 12 },
+      { header: 'Task Domain', key: 'category', width: 25 },
+      { header: 'Operational Description', key: 'desc', width: 50 },
+      { header: 'Allocated Hours', key: 'taskHours', width: 15 },
+    ];
+
+    // Style Header
+    const headerRow = worksheet.getRow(1);
+    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 12 };
+    headerRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF4F46E5' }, // Indigo-600
+    };
+    headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+
+    // Process Data
+    filteredData.forEach((user) => {
+      const ts = user.timesheets?.[0];
+      if (!ts) {
+        worksheet.addRow({
+          name: user.name,
+          designation: user.designation || user.role,
+          start: 'MISSING',
+          end: 'MISSING',
+          total: 0,
+          category: 'NO REPORT FILED',
+          desc: '---',
+          taskHours: 0
+        }).font = { color: { argb: 'FFF87171' } }; // Red-400
+        return;
+      }
+
+      ts.tasks.forEach((task: any, idx: number) => {
+        worksheet.addRow({
+          name: idx === 0 ? user.name : '',
+          designation: idx === 0 ? (user.designation || user.role) : '',
+          start: idx === 0 ? ts.startTime : '',
+          end: idx === 0 ? ts.endTime : '',
+          total: idx === 0 ? ts.totalHours : '',
+          category: task.categoryName || 'General',
+          desc: task.description || task.taskDesc || '',
+          taskHours: task.hours
+        });
+      });
+
+      // Add empty row separator
+      worksheet.addRow({});
+    });
+
+    // Auto-filter and freeze header
+    worksheet.autoFilter = 'A1:H1';
+    worksheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+    // Buffer and Download
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = window.URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `Matrix_Execution_Report_${date}.xlsx`;
+    anchor.click();
+    window.URL.revokeObjectURL(url);
+  }
+
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 max-w-7xl mx-auto pb-20">
       {/* Header & Filter Section */}
@@ -196,13 +276,21 @@ export default function TimesheetSummaryPage() {
                  <TableProperties className="h-7 w-7" />
                </div>
                <div>
-                  <h1 className="text-3xl font-black text-white tracking-tight leading-none">Execution Reports</h1>
-                  <p className="mt-2 text-sm text-slate-400 font-medium">Monitoring and analyzing daily work delivery across structural hierarchy.</p>
+                  <h1 className="text-3xl font-black text-white tracking-tight leading-none uppercase">Execution Reports</h1>
+                  <p className="mt-2 text-sm text-slate-400 font-medium tracking-tight">Monitoring and analyzing daily work delivery across structural hierarchy.</p>
                </div>
             </div>
           </div>
           
           <div className="flex flex-col sm:flex-row items-stretch gap-4">
+            <button
+               onClick={exportToExcel}
+               disabled={!filteredData.length || loading}
+               className="flex items-center justify-center gap-3 px-6 py-3.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-2xl text-xs font-black uppercase tracking-widest transition shadow-xl shadow-indigo-500/20"
+            >
+               <Download className="h-4 w-4" /> Export Report
+            </button>
+
             <div className="flex flex-col gap-2 min-w-[200px]">
               <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">Reporting Date</label>
               <div className="group relative">

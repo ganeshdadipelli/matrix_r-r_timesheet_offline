@@ -52,4 +52,31 @@ export const createEntrySchema = z.object({
   { message: 'Sum of all dependency counts must equal Offline Count' }
 );
 
-export const updateEntrySchema = createEntrySchema.partial().omit({ districtId: true, date: true });
+// Build updateEntrySchema from the raw object shape (before .refine()) so .partial() works.
+const baseEntryObject = z.object({
+  districtId: z.string().uuid().optional(),
+  date:       z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD').optional(),
+  totalCount:  nonNegInt.optional(),
+  onlineCount: nonNegInt.optional(),
+  offlineCount:nonNegInt.optional(),
+  cat6Cable:              nonNegInt.default(0),
+  threeCorepower:         nonNegInt.default(0),
+  gponIssues:             nonNegInt.default(0),
+  ofcIssues:              nonNegInt.default(0),
+  cameraStoreReplacement: nonNegInt.default(0),
+  camerasFluctuating:     nonNegInt.default(0),
+  needToCheck:            nonNegInt.default(0),
+  fiberRequired:          nonNegInt.default(0),
+  hydraLadder:            nonNegInt.default(0),
+  mcbIssue:               nonNegInt.default(0),
+  switch8portIssue:       nonNegInt.default(0),
+  roadExtensionConstruction: nonNegInt.default(0),
+  noOlt:             nonNegInt.default(0),
+  popDown:           nonNegInt.default(0),
+  jbAccident:        nonNegInt.default(0),
+  renovation:        nonNegInt.default(0),
+  powerDisconnection:nonNegInt.default(0),
+  dgpOffice:         nonNegInt.default(0),
+  needPeerIp:        nonNegInt.default(0),
+});
+export const updateEntrySchema = baseEntryObject.omit({ districtId: true, date: true });

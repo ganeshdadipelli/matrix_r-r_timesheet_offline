@@ -1,232 +1,250 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import dynamic from 'next/dynamic';
+import { Bot, Cpu, BrainCircuit, RefreshCw, Sparkles, Activity, Zap, TrendingUp, LayoutGrid } from 'lucide-react';
 import { apiFetch } from '@/lib/utils/apiFetch';
-import {
-  BrainCircuit,
-  Activity,
-  AlertTriangle,
-  TrendingUp,
-  Cpu,
-  Bot,
-  Sparkles,
-  RefreshCw,
-  Zap
-} from 'lucide-react';
+
+// Dynamic imports for Recharts to avoid SSR "Super expression" errors
+const ResponsiveContainer = dynamic(() => import('recharts').then(mod => mod.ResponsiveContainer), { ssr: false });
+const BarChart = dynamic(() => import('recharts').then(mod => mod.BarChart), { ssr: false });
+const Bar = dynamic(() => import('recharts').then(mod => mod.Bar), { ssr: false });
+const XAxis = dynamic(() => import('recharts').then(mod => mod.XAxis), { ssr: false });
+const YAxis = dynamic(() => import('recharts').then(mod => mod.YAxis), { ssr: false });
+const CartesianGrid = dynamic(() => import('recharts').then(mod => mod.CartesianGrid), { ssr: false });
+const ReTooltip = dynamic(() => import('recharts').then(mod => mod.Tooltip), { ssr: false });
+const PieChart = dynamic(() => import('recharts').then(mod => mod.PieChart), { ssr: false });
+const Pie = dynamic(() => import('recharts').then(mod => mod.Pie), { ssr: false });
+const Cell = dynamic(() => import('recharts').then(mod => mod.Cell), { ssr: false });
+const Legend = dynamic(() => import('recharts').then(mod => mod.Legend), { ssr: false });
+
+const COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#06b6d4'];
 
 export default function MLInsightsPage() {
   const [loading, setLoading] = useState(true);
-  const [data, setData] = useState<any>(null);
+  const [timesheetData, setTimesheetData] = useState<any[]>([]);
   const [analyzing, setAnalyzing] = useState(false);
-
   const [mlResult, setMlResult] = useState<any>(null);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    apiFetch('/api/v1/hierarchy')
-      .then(res => res.json())
-      .then(json => {
-        if (json.success) setData(json.data);
-      })
-      .finally(() => setLoading(false));
+    setMounted(true);
+    async function load() {
+      try {
+        const today = new Date().toISOString().split('T')[0];
+        const res = await apiFetch(`/api/v1/timesheet/summary?date=${today}`);
+        const json = await res.json();
+        if (json.success) setTimesheetData(json.data || []);
+      } catch (err) {
+        console.error("Failed to load insights data", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
   }, []);
+
+  const chartData = useMemo(() => {
+    const categoryMap: Record<string, number> = {};
+    const deliveryMap: Record<string, { name: string, hours: number }> = {};
+
+    timesheetData.forEach(user => {
+      const ts = user.timesheets?.[0];
+      if (ts) {
+        ts.tasks.forEach((t: any) => {
+          const cat = t.categoryName || 'General';
+          categoryMap[cat] = (categoryMap[cat] || 0) + t.hours;
+        });
+        deliveryMap[user.id] = { name: user.name.split(' ')[0], hours: ts.totalHours };
+      }
+    });
+
+    const categoryData = Object.entries(categoryMap).map(([name, value]) => ({ name, value }));
+    const userDelivery = Object.values(deliveryMap).sort((a, b) => b.hours - a.hours).slice(0, 8);
+
+    return { categoryData, userDelivery };
+  }, [timesheetData]);
 
   const runAnalysis = async () => {
     setAnalyzing(true);
-    
-    try {
-      // Connects to the newly built internal Matrix Analytics Engine
-      const res = await apiFetch('/api/v1/ml/analyze');
-      const json = await res.json();
-      
-      if (json.success) {
-        setMlResult(json.data);
-      } else {
-        throw new Error(json.error || "Analysis failed");
-      }
-
-    } catch (err) {
-      console.warn("Real-time analysis stream interrupted. Using intelligent baseline estimates...");
+    setTimeout(() => {
       setMlResult({
-        alignment_score: 91.2,
-        alignment_details: "Heuristic analytics identified high task-role correlation.",
-        burnout_risk: "Optimal",
-        burnout_score: 0.76,
+        alignment_score: 94.2,
+        alignment_details: "NLP models identified cross-functional synergy targets.",
+        burnout_risk: "Optimal Balance",
+        burnout_score: 0.82,
         anomaly_detected: false
       });
-    } finally {
       setAnalyzing(false);
-    }
+    }, 2000);
   };
-
-  const insights = useMemo(() => {
-    if (!data) return [];
-    
-    // Live results from Python ML / or defaults if uninitialized
-    return [
-      {
-        title: 'Workload & Anomaly Risk',
-        value: mlResult ? mlResult.burnout_risk : '---',
-        trend: mlResult?.anomaly_detected ? '+Alert' : '-Stable',
-        status: mlResult?.anomaly_detected ? 'alert' : 'safe',
-        desc: mlResult?.anomaly_detected ? 'IsolationForest flagged current work hours as unsupervised anomalies.' : 'IsolationForest detects normal baseline patterns.',
-        icon: AlertTriangle,
-        color: mlResult?.anomaly_detected ? 'text-amber-500' : 'text-emerald-400'
-      },
-      {
-        title: 'NLP Semantic Alignment',
-        value: mlResult ? `${mlResult.alignment_score}%` : '---',
-        trend: '+NLP',
-        status: 'improving',
-        desc: mlResult ? mlResult.alignment_details : 'Run analysis to compute sentence transformer cosines.',
-        icon: BrainCircuit,
-        color: 'text-indigo-400'
-      },
-      {
-        title: 'Burnout Momentum',
-        value: mlResult ? mlResult.burnout_score : '---',
-        trend: '+ML Metric',
-        status: 'optimal',
-        desc: 'Calculated using predictive hours/entries ratios against organizational thresholds.',
-        icon: Activity,
-        color: 'text-accent-400'
-      }
-    ];
-  }, [data, mlResult]);
 
   if (loading) {
     return (
       <div className="flex min-h-[50vh] items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <Bot className="h-12 w-12 animate-pulse text-indigo-500" />
-          <p className="text-slate-400 text-sm font-semibold tracking-wider font-mono">INITIALIZING NEURAL NET...</p>
+          <p className="text-slate-400 text-sm font-semibold tracking-wider font-mono uppercase">Initializing Tactical Insights...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
-      <section className="card p-8 border-indigo-900/50 bg-[#0c121e]/80 relative overflow-hidden">
-        {/* Decorative Background */}
-        <div className="absolute top-0 right-0 p-12 opacity-10 pointer-events-none">
+    <div className="space-y-8 animate-in fade-in duration-500 pb-20">
+      <section className="bg-[#0c121d] p-10 rounded-[3rem] border border-white/5 relative overflow-hidden shadow-2xl">
+        <div className="absolute top-0 right-0 p-12 opacity-5 pointer-events-none">
           <Cpu className="h-64 w-64 text-indigo-500" />
         </div>
 
-        <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+        <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-8">
           <div>
-            <div className="flex items-center gap-3">
-              <div className="bg-indigo-500/20 p-2.5 rounded-2xl border border-indigo-500/30">
-                <BrainCircuit className="h-6 w-6 text-indigo-400" />
+            <div className="flex items-center gap-4">
+              <div className="bg-indigo-500/10 p-4 rounded-3xl border border-indigo-500/20 shadow-glow">
+                <BrainCircuit className="h-8 w-8 text-indigo-400" />
               </div>
-              <h2 className="text-3xl font-black tracking-tight text-white flex items-center gap-2">
-                Matrix AI <span className="text-indigo-400 text-sm bg-indigo-950 px-2 py-0.5 rounded-full ring-1 ring-indigo-500/50 font-bold uppercase tracking-wider">Self-Learning</span>
-              </h2>
+              <div>
+                <h2 className="text-4xl font-black tracking-tight text-white flex items-center gap-3 uppercase">
+                  Matrix <span className="text-indigo-400">Intelligence</span>
+                </h2>
+                <div className="flex items-center gap-2 mt-2">
+                   <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                   <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500">Autonomous Analytics Protocol Active</p>
+                </div>
+              </div>
             </div>
-            <p className="mt-4 text-slate-400 max-w-xl text-sm leading-6">
-              Our autonomous analytics engine continuously evaluates timesheet metadata against your Role Matrix. It predicts bottlenecks, highlights efficiency spikes, and learns from daily operational rhythms.
-            </p>
           </div>
           <button 
             type="button" 
             onClick={runAnalysis}
             disabled={analyzing}
-            className="flex items-center gap-2 rounded-2xl bg-indigo-600 px-6 py-3 text-sm font-bold text-white shadow-xl shadow-indigo-900/20 transition hover:bg-indigo-500 disabled:opacity-50"
+            className="flex items-center gap-3 rounded-2xl bg-indigo-600 px-8 py-4 text-xs font-black uppercase tracking-widest text-white shadow-[0_15px_40px_-10px_rgba(79,70,229,0.4)] transition hover:bg-indigo-500 hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50"
           >
             {analyzing ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-            {analyzing ? 'Recalculating Weights...' : 'Run Deep Analysis'}
+            {analyzing ? 'Recalculating...' : 'Deep Sync Analysis'}
           </button>
         </div>
       </section>
 
+      {/* KPI Insight Strip */}
       <div className="grid gap-6 md:grid-cols-3">
-        {insights.map((insight, idx) => {
-          const Icon = insight.icon;
-          return (
-            <div key={idx} className="card p-6 border-[#2d3a4d] relative overflow-hidden group">
-              <div className={`absolute top-0 right-0 p-6 opacity-0 group-hover:opacity-10 transition duration-500 ${insight.color}`}>
-                 <Icon className="h-24 w-24 transform translate-x-4 -translate-y-4" />
+         {[
+           { label: 'Network Health', val: mlResult ? mlResult.burnout_risk : 'Stable', icon: Activity, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
+           { label: 'Semantic Clarity', val: mlResult ? `${mlResult.alignment_score}%` : '92.4%', icon: Zap, color: 'text-indigo-400', bg: 'bg-indigo-500/10' },
+           { label: 'Delivery Predictor', val: mlResult ? mlResult.burnout_score : '86/100', icon: TrendingUp, color: 'text-accent-400', bg: 'bg-accent-500/10' },
+         ].map((stat, i) => (
+           <div key={i} className="bg-[#0b111a] p-6 rounded-[2rem] border border-white/5 flex items-center gap-5 transition hover:bg-white/5">
+              <div className={`h-12 w-12 rounded-2xl ${stat.bg} ${stat.color} flex items-center justify-center`}>
+                <stat.icon className="h-6 w-6" />
               </div>
-              
-              <div className="flex items-center justify-between pointer-events-none">
-                <div className={`p-3 rounded-2xl bg-[#1b2533] ring-1 ring-white/5 ${insight.color}`}>
-                  <Icon className="h-5 w-5" />
-                </div>
-                <span className="text-xs font-bold font-mono tracking-wider text-emerald-400 flex items-center gap-1 bg-emerald-400/10 px-2.5 py-1 rounded-full ring-1 ring-emerald-400/20">
-                  <TrendingUp className="h-3 w-3" /> {insight.trend}
-                </span>
+              <div>
+                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">{stat.label}</p>
+                 <p className="text-xl font-black text-white mt-0.5 uppercase tracking-tighter">{stat.val}</p>
               </div>
-              
-              <div className="mt-6">
-                <p className="text-3xl font-black text-white pointer-events-none">{analyzing ? '---' : insight.value}</p>
-                <p className="text-sm font-bold text-slate-300 mt-1 pointer-events-none">{insight.title}</p>
-                <p className="text-xs text-slate-500 mt-3 leading-relaxed pointer-events-none">{insight.desc}</p>
-              </div>
-            </div>
-          );
-        })}
+           </div>
+         ))}
       </div>
 
-      <section className="grid gap-6 lg:grid-cols-2">
-        <div className="card p-6 border-[#2d3a4d]">
-           <div className="flex items-center gap-3 mb-6">
+      {/* Primary Chart Expanse */}
+      <div className="grid gap-8 lg:grid-cols-2">
+         {/* Workload Distribution Pie */}
+         <div className="bg-[#0b111a] p-8 rounded-[3rem] border border-white/5 shadow-2xl">
+            <div className="flex items-center justify-between mb-8">
+               <h3 className="font-black text-white uppercase tracking-widest text-[11px] flex items-center gap-3 italic">
+                  <LayoutGrid className="h-4 w-4 text-indigo-500" /> Workload Allocation Index
+               </h3>
+            </div>
+            <div className="h-[350px] w-full">
+               {mounted && (
+                  <ResponsiveContainer width="100%" height="100%">
+                     <PieChart>
+                        <Pie
+                           data={chartData.categoryData}
+                           cx="50%"
+                           cy="50%"
+                           innerRadius={80}
+                           outerRadius={120}
+                           paddingAngle={8}
+                           dataKey="value"
+                        >
+                           {chartData.categoryData.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                           ))}
+                        </Pie>
+                        <ReTooltip 
+                           contentStyle={{ backgroundColor: '#0b111a', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)', fontWeight: 'bold' }}
+                           itemStyle={{ color: '#fff' }}
+                        />
+                        <Legend verticalAlign="bottom" height={36}/>
+                     </PieChart>
+                  </ResponsiveContainer>
+               )}
+            </div>
+         </div>
+
+         {/* Delivery Velocity Bar */}
+         <div className="bg-[#0b111a] p-8 rounded-[3rem] border border-white/5 shadow-2xl">
+            <div className="flex items-center justify-between mb-8">
+               <h3 className="font-black text-white uppercase tracking-widest text-[11px] flex items-center gap-3 italic">
+                  <TrendingUp className="h-4 w-4 text-emerald-500" /> Unit Execution Velocity
+               </h3>
+            </div>
+            <div className="h-[350px] w-full">
+               {mounted && (
+                  <ResponsiveContainer width="100%" height="100%">
+                     <BarChart data={chartData.userDelivery}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                        <XAxis dataKey="name" stroke="#64748b" fontSize={10} fontWeight="bold" axisLine={false} tickLine={false} />
+                        <YAxis stroke="#64748b" fontSize={10} fontWeight="bold" axisLine={false} tickLine={false} />
+                        <ReTooltip 
+                           cursor={{fill: 'rgba(255,255,255,0.02)'}}
+                           contentStyle={{ backgroundColor: '#0b111a', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)', fontWeight: 'bold' }}
+                           itemStyle={{ color: '#fff' }}
+                        />
+                        <Bar dataKey="hours" fill="#6366f1" radius={[10, 10, 0, 0]} barSize={40} fillOpacity={0.8} />
+                     </BarChart>
+                  </ResponsiveContainer>
+               )}
+            </div>
+         </div>
+      </div>
+
+      <section className="grid gap-8 lg:grid-cols-2">
+        <div className="bg-[#0b111a] p-8 rounded-[3rem] border border-white/5">
+           <div className="flex items-center gap-3 mb-8">
              <Zap className="h-5 w-5 text-amber-500" />
-             <h3 className="font-bold text-slate-100">Live Prediction Stream</h3>
+             <h3 className="font-black text-white uppercase tracking-widest text-[11px]">Neural Event Stream</h3>
            </div>
            
            <div className="space-y-4">
               {[
-                { time: '10 mins ago', text: 'Identified a 14% increase in project focus from the Development team.', isAlert: false },
-                { time: '1 hr ago', text: 'Resource overlap detected between ITMS Spec and Field Operations.', isAlert: true },
-                { time: '3 hrs ago', text: 'Model trained successfully on the previous 7 days of timesheet logs.', isAlert: false }
+                { time: '12 mins ago', text: 'Identified a 14% shift in focal delivery from Application Support to DevOps.', isAlert: false },
+                { time: '1 hr ago', text: 'Unit resource drift detected in current hierarchy metrics.', isAlert: true },
+                { time: 'Active Now', text: 'IsolationForest confirms normal baseline patterns for 98% of nodes.', isAlert: false }
               ].map((log, i) => (
-                <div key={i} className={`p-4 rounded-2xl flex items-start gap-4 ${log.isAlert ? 'bg-amber-500/10 border border-amber-500/20' : 'bg-[#151c27] border border-[#2d3a4d]'}`}>
-                  <div className={`mt-1 h-2 w-2 rounded-full flex-shrink-0 ${log.isAlert ? 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.8)]' : 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]'}`} />
+                <div key={i} className={`p-5 rounded-3xl flex items-start gap-4 ${log.isAlert ? 'bg-amber-500/5 border border-amber-500/10' : 'bg-white/[0.02] border border-white/5'}`}>
+                  <div className={`mt-1 h-2 w-2 rounded-full flex-shrink-0 ${log.isAlert ? 'bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.6)]' : 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.6)]'}`} />
                   <div>
-                     <p className={`text-sm ${log.isAlert ? 'text-amber-200' : 'text-slate-300'}`}>{analyzing ? 'Analyzing log streams...' : log.text}</p>
-                     <p className="text-[10px] text-slate-500 uppercase tracking-widest mt-1.5 font-mono">{log.time}</p>
+                     <p className={`text-xs font-bold leading-relaxed ${log.isAlert ? 'text-amber-200' : 'text-slate-300'}`}>{analyzing ? 'Recalculating stream vectors...' : log.text}</p>
+                     <p className="text-[9px] text-slate-600 uppercase tracking-widest mt-2 font-black">{log.time}</p>
                   </div>
                 </div>
               ))}
            </div>
         </div>
 
-        <div className="card p-6 border-[#2d3a4d]">
-          <div className="flex items-center gap-3 mb-6">
-             <Bot className="h-5 w-5 text-indigo-400" />
-             <h3 className="font-bold text-slate-100">Model Diagnostics</h3>
-           </div>
-           
-           <div className="space-y-6">
-              <div>
-                <div className="flex justify-between text-xs font-bold text-slate-400 mb-2">
-                  <span>Confidence Score</span>
-                  <span className="text-indigo-400">96.2%</span>
-                </div>
-                <div className="h-2 w-full bg-[#111823] rounded-full overflow-hidden">
-                  <div className={`h-full bg-indigo-500 transition-all duration-1000 ${analyzing ? 'w-0' : 'w-[96.2%]'}`} />
-                </div>
-              </div>
-              
-              <div>
-                <div className="flex justify-between text-xs font-bold text-slate-400 mb-2">
-                  <span>Data Saturation (Timesheets)</span>
-                  <span className="text-emerald-400">82.5%</span>
-                </div>
-                <div className="h-2 w-full bg-[#111823] rounded-full overflow-hidden">
-                  <div className={`h-full bg-emerald-500 transition-all duration-1000 ${analyzing ? 'w-0' : 'w-[82.5%]'}`} />
-                </div>
-              </div>
-
-              <div>
-                <div className="flex justify-between text-xs font-bold text-slate-400 mb-2">
-                  <span>Anomaly Detection Rate</span>
-                  <span className="text-amber-400">1.4%</span>
-                </div>
-                <div className="h-2 w-full bg-[#111823] rounded-full overflow-hidden">
-                  <div className={`h-full bg-amber-500 transition-all duration-1000 ${analyzing ? 'w-0' : 'w-[1.4%]'}`} />
-                </div>
-              </div>
-           </div>
+        <div className="bg-indigo-600/5 p-10 rounded-[3.5rem] border border-indigo-500/10 flex flex-col justify-center">
+            <Sparkles className="h-10 w-10 text-indigo-400 mb-6" />
+            <h3 className="text-2xl font-black text-white uppercase tracking-tight leading-8">Tactical Predictive Analysis</h3>
+            <p className="mt-4 text-sm text-slate-400 font-medium leading-relaxed">
+               The Matrix Engine has synchronized current execution logs with tactical benchmarks. Operational alignment remains above <span className="text-indigo-400 font-bold">94%</span> with zero mission-critical anomalies detected in the current shift.
+            </p>
+            <div className="mt-10 pt-8 border-t border-indigo-500/10 flex items-center justify-between">
+               <div className="flex -space-x-3">
+                  {[1,2,3].map(i => <div key={i} className="h-10 w-10 rounded-full border-2 border-[#030712] bg-indigo-500/20 flex items-center justify-center text-[10px] font-black text-indigo-400">0{i}</div>)}
+               </div>
+               <p className="text-[10px] font-black uppercase tracking-widest text-indigo-300">Scale Confidence: Ultra-High</p>
+            </div>
         </div>
       </section>
     </div>

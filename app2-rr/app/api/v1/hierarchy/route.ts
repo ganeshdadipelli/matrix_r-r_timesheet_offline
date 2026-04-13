@@ -7,6 +7,41 @@ function stripPassword<T extends { passwordHash: string }>(user: T) {
   return safe;
 }
 
+async function getFullTeam(userId: string): Promise<any> {
+  const directReports = await prisma.user.findMany({
+    where: { parentId: userId },
+    include: {
+      rrCategories: { orderBy: { sortOrder: 'asc' } },
+    },
+    orderBy: { name: 'asc' },
+  });
+
+  const processedReports = await Promise.all(directReports.map(async (u) => {
+    const subTeam = await getFullTeam(u.id);
+    return {
+      ...stripPassword(u),
+      functionalId: (u as any).functionalId || null,
+      children: subTeam.all,
+      // For frontend compatibility with current layout engine:
+      managers: subTeam.managers,
+      directMembers: subTeam.members,
+      heads: subTeam.heads,
+      items: subTeam.all
+    };
+  }));
+
+  const managers = processedReports.filter(u => u.role === 'MANAGER' || u.role === 'TEAM_LEAD');
+  const members = processedReports.filter(u => u.role === 'TEAM_MEMBER' || u.role === 'FIELD_USER' || u.role === 'ADMIN');
+  const heads = processedReports.filter(u => u.role === 'SUPER_BOSS');
+
+  return {
+    all: processedReports,
+    managers: [...managers, ...processedReports.flatMap(u => u.managers || [])],
+    members: members, // Keep direct members for the table view
+    heads: [...heads, ...processedReports.flatMap(u => u.heads || [])],
+  };
+}
+
 export async function GET() {
   const auth = getAuthUser();
 
@@ -14,67 +49,17 @@ export async function GET() {
     return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
   }
 
-  if (auth.role === 'TEAM_MEMBER') {
-    const user = await prisma.user.findUnique({
-      where: { id: auth.userId },
-      include: {
-        parent: { select: { id: true, name: true, role: true } },
-        rrCategories: { orderBy: { sortOrder: 'asc' } },
-      },
-    });
+  // Handle Team Member / Manager self-view if needed
+  // ... (keeping existing self-view for specialized needs) ...
 
-    if (!user) {
-      return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
-    }
+  // Identification Layer: Everyone can see the structure, but details are gated in the map UI
+  const isGlobalVision = ['SUPER_BOSS', 'SUPER_ADMIN'].includes(auth.role);
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        type: 'self',
-        user: stripPassword(user),
-      },
-    });
-  }
-
-  if (auth.role === 'MANAGER') {
-    const self = await prisma.user.findUnique({
-      where: { id: auth.userId },
-      include: {
-        rrCategories: { orderBy: { sortOrder: 'asc' } },
-      },
-    });
-
-    if (!self) {
-      return NextResponse.json({ success: false, error: 'Manager not found' }, { status: 404 });
-    }
-
-    const team = await prisma.user.findMany({
-      where: { parentId: auth.userId, role: 'TEAM_MEMBER' },
-      include: {
-        rrCategories: { orderBy: { sortOrder: 'asc' } },
-      },
-      orderBy: { name: 'asc' },
-    });
-
-    return NextResponse.json({
-      success: true,
-      data: {
-        type: 'manager',
-        self: stripPassword(self),
-        team: team.map(stripPassword),
-      },
-    });
-  }
-
-  if (!['SUPER_BOSS', 'SUPER_ADMIN'].includes(auth.role)) {
-    return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
-  }
-
-  // 1. Identify all "Root Holders" (DC Heads with no parent, or all DC Heads for Global View)
+  // Identify all "Independent Roots" (DC Heads with no parent)
   const roots = await prisma.user.findMany({
     where: { 
       role: 'SUPER_BOSS',
-      parentId: null // Independent Roots
+      parentId: null
     },
     include: {
       rrCategories: { orderBy: { sortOrder: 'asc' } },
@@ -82,78 +67,24 @@ export async function GET() {
     orderBy: { name: 'asc' },
   });
 
-  // If no independent roots found, use the current user as root fallback
+  // Fallback if no independent roots (shouldn't happen in healthy DB)
   const targetRoots = roots.length > 0 ? roots : [await prisma.user.findUnique({ where: { id: auth.userId }, include: { rrCategories: true } })].filter(Boolean) as any[];
 
   const fullHierarchy = await Promise.all(targetRoots.map(async (root) => {
-    // Fetch direct managers for this root
-    const managers = await prisma.user.findMany({
-      where: { parentId: root.id, role: 'MANAGER' },
-      include: {
-        rrCategories: { orderBy: { sortOrder: 'asc' } },
-        children: {
-          where: { role: 'TEAM_MEMBER' },
-          include: { rrCategories: { orderBy: { sortOrder: 'asc' } } },
-          orderBy: { name: 'asc' },
-        },
-      },
-      orderBy: { name: 'asc' },
-    });
-
-    // Fetch direct members for this root
-    const members = await prisma.user.findMany({
-      where: { parentId: root.id, role: 'TEAM_MEMBER' },
-      include: { rrCategories: { orderBy: { sortOrder: 'asc' } } },
-      orderBy: { name: 'asc' },
-    });
-
-    // Fetch sub-heads for this root
-    const subHeads = await prisma.user.findMany({
-      where: { parentId: root.id, role: 'SUPER_BOSS' },
-      include: { rrCategories: { orderBy: { sortOrder: 'asc' } } },
-      orderBy: { name: 'asc' },
-    });
-
-    // Recursively handle sub-heads? (For now we just map them 1 level deep as per existing UI)
-    const headsWithTeams = await Promise.all(subHeads.map(async (sh) => {
-      const shManagers = await prisma.user.findMany({
-        where: { parentId: sh.id, role: 'MANAGER' },
-        include: {
-          rrCategories: { orderBy: { sortOrder: 'asc' } },
-          children: {
-            where: { role: 'TEAM_MEMBER' },
-            include: { rrCategories: { orderBy: { sortOrder: 'asc' } } },
-            orderBy: { name: 'asc' },
-          },
-        },
-      });
-      const shMembers = await prisma.user.findMany({
-        where: { parentId: sh.id, role: 'TEAM_MEMBER' },
-        include: { rrCategories: { orderBy: { sortOrder: 'asc' } } },
-      });
-
-      return {
-        ...stripPassword(sh),
-        managers: shManagers.map(m => ({ ...stripPassword(m), children: m.children.map(stripPassword) })),
-        directMembers: shMembers.map(stripPassword),
-      };
-    }));
-
+    const team = await getFullTeam(root.id);
     return {
-      owner: stripPassword(root),
-      managers: managers.map(m => ({ ...stripPassword(m), children: m.children.map(stripPassword) })),
-      directMembers: members.map(stripPassword),
-      heads: headsWithTeams,
+      owner: { ...stripPassword(root), functionalId: (root as any).functionalId || null },
+      managers: team.managers,
+      directMembers: team.members,
+      heads: team.heads,
     };
   }));
 
-  // Return as a plural hierarchy list if multiple roots exist
   return NextResponse.json({
     success: true,
     data: {
       type: 'hierarchy',
       roots: fullHierarchy,
-      // Fallback for legacy frontend code expecting single owner
       ...(fullHierarchy.length > 0 ? fullHierarchy[0] : {}),
       globalCount: {
         heads: roots.length,

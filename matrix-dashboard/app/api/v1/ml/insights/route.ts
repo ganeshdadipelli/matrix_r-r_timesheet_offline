@@ -24,7 +24,7 @@ function predictNext(vals: number[], w=7) {
 }
 
 export async function GET(req: NextRequest) {
-  const user = getAuthUser();
+  const user = await getAuthUser();
   if (!user || !['ADMIN','SUPER_ADMIN'].includes(user.role)) {
     return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
   }

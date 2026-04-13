@@ -80,8 +80,8 @@ function getTodayStartIST(): Date {
     month: '2-digit',
     day: '2-digit',
   }).format(now);
-
-  return new Date(`${today}T00:00:00+05:30`);
+  // Store as UTC midnight of the IST calendar date so PostgreSQL DATE stores the correct value
+  return new Date(`${today}T00:00:00.000Z`);
 }
 
 export async function GET(req: NextRequest) {
@@ -96,13 +96,23 @@ export async function GET(req: NextRequest) {
   const where: Record<string, unknown> = {};
 
   if (date) {
-    const start = new Date(`${date}T00:00:00+05:30`);
-    const end = new Date(`${date}T23:59:59.999+05:30`);
-    where.date = { gte: start, lte: end };
+    const start = new Date(`${date}T00:00:00.000Z`);
+    const end   = new Date(`${date}T23:59:59.999Z`);
+    where.date  = { gte: start, lte: end };
   }
 
   if (districtId) where.districtId = districtId;
-  if (user.role === 'FIELD_USER' && user.districtId) where.districtId = user.districtId;
+
+  if (user.role === 'FIELD_USER') {
+    const dbUser = await prisma.user.findUnique({
+      where: { id: user.userId },
+      select: { districtIdsJson: true, districtId: true },
+    });
+    let distIds: string[] = [];
+    try { distIds = JSON.parse(dbUser?.districtIdsJson || '[]'); } catch {}
+    if (!distIds.length && dbUser?.districtId) distIds = [dbUser.districtId];
+    if (distIds.length) where.districtId = { in: distIds };
+  }
 
   const entries = await prisma.dailyEntry.findMany({
     where,
@@ -124,11 +134,20 @@ export async function POST(req: NextRequest) {
     const user = auth.user;
     const body = await req.json();
 
-    if (user.role === 'FIELD_USER' && body.districtId !== user.districtId) {
-      return NextResponse.json(
-        { success: false, error: 'You can only submit data for your assigned district' },
-        { status: 403 }
-      );
+    if (user.role === 'FIELD_USER') {
+      const dbUser = await prisma.user.findUnique({
+        where: { id: user.userId },
+        select: { districtIdsJson: true, districtId: true },
+      });
+      let allowedIds: string[] = [];
+      try { allowedIds = JSON.parse(dbUser?.districtIdsJson || '[]'); } catch {}
+      if (!allowedIds.length && dbUser?.districtId) allowedIds = [dbUser.districtId];
+      if (allowedIds.length > 0 && !allowedIds.includes(body.districtId)) {
+        return NextResponse.json(
+          { success: false, error: 'You can only submit data for your assigned districts' },
+          { status: 403 }
+        );
+      }
     }
 
     const parsed = entrySchema.safeParse(body);
@@ -141,7 +160,7 @@ export async function POST(req: NextRequest) {
     }
 
     const d = parsed.data;
-    const entryDate = new Date(`${d.date}T00:00:00+05:30`);
+    const entryDate = new Date(`${d.date}T00:00:00.000Z`);
     const todayStart = getTodayStartIST();
 
     if (entryDate > todayStart) {

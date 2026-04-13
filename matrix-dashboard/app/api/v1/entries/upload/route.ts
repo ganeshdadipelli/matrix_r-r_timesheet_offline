@@ -16,7 +16,7 @@ function parseDateValue(value: string): Date | null {
 
   const isoMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (isoMatch) {
-    const date = new Date(`${trimmed}T00:00:00+05:30`);
+    const date = new Date(`${trimmed}T00:00:00.000Z`);
     return Number.isNaN(date.getTime()) ? null : date;
   }
 
@@ -35,7 +35,7 @@ function getTodayStartIST(): Date {
     day: '2-digit',
   }).format(now);
 
-  return new Date(`${today}T00:00:00+05:30`);
+  return new Date(`${today}T00:00:00.000Z`);
 }
 
 type UploadRow = {
@@ -217,30 +217,84 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'No file provided' }, { status: 400 });
     }
 
-    if (!file.name.toLowerCase().endsWith('.csv')) {
-      return NextResponse.json({ success: false, error: 'Only CSV files are accepted' }, { status: 400 });
+    const name = file.name.toLowerCase();
+    const isExcel = name.endsWith('.xlsx');
+    const isCsv   = name.endsWith('.csv');
+
+    if (!isExcel && !isCsv) {
+      return NextResponse.json({ success: false, error: 'Only CSV (.csv) or Excel (.xlsx) files are accepted' }, { status: 400 });
     }
 
-    const text = await file.text();
-    const lines = text
-      .replace(/^\uFEFF/, '')
-      .split(/\r?\n/)
-      .map((l) => l.trimEnd())
-      .filter(Boolean);
+    // Build a list of string-array rows depending on file type
+    let rawRows: string[][] = [];
 
-    if (lines.length < 2) {
-      return NextResponse.json({ success: false, error: 'File is empty or has only header' }, { status: 400 });
+    if (isExcel) {
+      const ExcelJS = await import('exceljs');
+      const wb = new ExcelJS.Workbook();
+      const arrayBuf = await file.arrayBuffer();
+      await wb.xlsx.load(Buffer.from(arrayBuf) as any);
+      const sheet = wb.worksheets[0];
+      if (!sheet) {
+        return NextResponse.json({ success: false, error: 'Excel file has no worksheets' }, { status: 400 });
+      }
+      sheet.eachRow((row) => {
+        const cells: string[] = [];
+        row.eachCell({ includeEmpty: true }, (cell, colNum) => {
+          // Fill any column gap with empty strings
+          while (cells.length < colNum - 1) cells.push('');
+          const v = cell.value;
+          let s = '';
+          if (v === null || v === undefined) {
+            s = '';
+          } else if (v instanceof Date) {
+            const y = v.getFullYear();
+            const m = String(v.getMonth() + 1).padStart(2, '0');
+            const d = String(v.getDate()).padStart(2, '0');
+            s = `${y}-${m}-${d}`;
+          } else if (typeof v === 'object') {
+            if ('result' in v) {
+              const res = (v as any).result;
+              s = res instanceof Date
+                ? `${res.getFullYear()}-${String(res.getMonth()+1).padStart(2,'0')}-${String(res.getDate()).padStart(2,'0')}`
+                : String(res ?? '').trim();
+            } else if ('richText' in v) {
+              s = ((v as any).richText as any[]).map((r: any) => r.text || '').join('').trim();
+            } else if ('error' in v) {
+              s = '';
+            } else {
+              s = String(v).trim();
+            }
+          } else {
+            s = String(v).trim();
+          }
+          cells.push(s);
+        });
+        rawRows.push(cells);
+      });
+    } else {
+      // CSV path
+      const text = await file.text();
+      const lines = text
+        .replace(/^\uFEFF/, '')
+        .split(/\r?\n/)
+        .map((l) => l.trimEnd())
+        .filter(Boolean);
+      rawRows = lines
+        .filter(l => !l.trim().startsWith('#'))
+        .map(l => splitCsvLine(l));
+    }
+
+    if (rawRows.length < 2) {
+      return NextResponse.json({ success: false, error: 'File is empty or has only a header row' }, { status: 400 });
     }
 
     let headerIndex: Record<string, number> | null = null;
     const parsedRows: UploadRow[] = [];
 
-    for (const line of lines) {
-      if (line.trim().startsWith('#')) continue;
+    for (const values of rawRows) {
+      if (!values.some(v => v.trim())) continue; // skip blank rows
 
-      const values = splitCsvLine(line);
       const nextHeader = buildHeaderIndex(values);
-
       if (nextHeader) {
         headerIndex = nextHeader;
         continue;
@@ -255,7 +309,7 @@ export async function POST(req: NextRequest) {
 
     if (!headerIndex || !parsedRows.length) {
       return NextResponse.json(
-        { success: false, error: 'Could not find valid upload rows in the CSV' },
+        { success: false, error: `Could not find valid upload rows in the ${isExcel ? 'Excel' : 'CSV'} file` },
         { status: 400 }
       );
     }

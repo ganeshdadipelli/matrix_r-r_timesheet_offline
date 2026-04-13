@@ -56,20 +56,23 @@ const NAV_BY_ROLE: Record<string, NavItem[]> = {
     { href: '/insights', label: 'ML Insights', icon: BrainCircuit },
     { href: '/rr', label: 'Role Matrix', icon: Settings2 },
   ],
+  TEAM_LEAD: [
+    { href: '/dashboard', label: 'Platform Overview', icon: FileText },
+    { href: '/team', label: 'Organization Map', icon: GitBranch },
+    { href: '/admin', label: 'Access Control', icon: Users },
+    { href: '/timesheet', label: 'Log Daily Works', icon: Clock4 },
+    { href: '/timesheet-summary', label: 'Work Execution Reports', icon: TableProperties },
+    { href: '/insights', label: 'ML Insights', icon: BrainCircuit },
+    { href: '/rr', label: 'Role Matrix', icon: Settings2 },
+  ],
   TEAM_MEMBER: [
     { href: '/dashboard', label: 'Platform Overview', icon: FileText },
+    { href: '/team', label: 'Organization Map', icon: GitBranch },
     { href: '/timesheet', label: 'Log Daily Works', icon: Clock4 },
+    { href: '/timesheet-summary', label: 'Work Execution Reports', icon: TableProperties },
     { href: '/insights', label: 'Self Diagnostics', icon: BrainCircuit },
     { href: '/rr', label: 'Role Matrix', icon: Settings2 },
   ],
-  FIELD_USER: [
-    { href: '/offline-entry', label: 'Data Entry', icon: ClipboardEdit },
-    { href: '/offline-entry/history', label: 'History', icon: HistoryIcon },
-  ],
-  ADMIN: [
-    { href: '/offline-entry', label: 'Data Entry', icon: ClipboardEdit },
-    { href: '/offline-entry/history', label: 'History', icon: HistoryIcon },
-  ]
 };
 
 const ROLE_LABELS: Record<string, string> = {
@@ -77,8 +80,6 @@ const ROLE_LABELS: Record<string, string> = {
   SUPER_BOSS: 'DC Head',
   MANAGER: 'Manager',
   TEAM_MEMBER: 'Team Member',
-  FIELD_USER: 'Field Team',
-  ADMIN: 'Admin',
 };
 
 const ROLE_BADGES: Record<string, string> = {
@@ -86,8 +87,6 @@ const ROLE_BADGES: Record<string, string> = {
   SUPER_BOSS: 'pill-head',
   MANAGER: 'pill-manager',
   TEAM_MEMBER: 'pill-member',
-  FIELD_USER: 'pill-member',
-  ADMIN: 'pill-manager',
 };
 
 function Avatar({ user }: { user: SessionUser | null }) {

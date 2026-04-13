@@ -95,8 +95,8 @@ async function main() {
   console.log('═══════════════════════════════════════');
   console.log('  LOGIN CREDENTIALS');
   console.log('═══════════════════════════════════════');
-  console.log('  Super Admin : superadmin@matrix.com / Admin@123');
-  console.log('  Admin       : admin@matrix.com      / Admin@123');
+  console.log('  Super Admin : sriaditya.c@matsecurity.in / Admin@123');
+  console.log('  Admin       : rahul.d@matsecurity.in      / Admin@123');
   console.log('  Field (VZM) : vizag@matrix.com      / Field@123');
   console.log('  Field (KRS) : krishna@matrix.com    / Field@123');
   console.log('═══════════════════════════════════════');

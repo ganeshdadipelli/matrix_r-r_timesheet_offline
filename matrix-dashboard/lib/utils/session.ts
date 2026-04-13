@@ -7,6 +7,7 @@ export interface SessionUser {
   email: string;
   role: string;
   districtId: string | null;
+  districtIds?: string[];
   district?: { id: string; name: string; code: string } | null;
 }
 

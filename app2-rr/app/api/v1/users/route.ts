@@ -12,9 +12,9 @@ type RRInput = {
 };
 
 const ALLOWED_CREATE: Record<string, UserRole[]> = {
-  SUPER_ADMIN: [UserRole.SUPER_BOSS, UserRole.MANAGER, UserRole.TEAM_MEMBER, UserRole.FIELD_USER, UserRole.ADMIN],
-  SUPER_BOSS: [UserRole.SUPER_BOSS, UserRole.MANAGER, UserRole.TEAM_MEMBER, UserRole.FIELD_USER, UserRole.ADMIN],
-  MANAGER: [UserRole.TEAM_MEMBER],
+  SUPER_ADMIN: [UserRole.SUPER_BOSS, UserRole.MANAGER, UserRole.TEAM_LEAD, UserRole.TEAM_MEMBER, UserRole.FIELD_USER, UserRole.ADMIN],
+  SUPER_BOSS: [UserRole.SUPER_BOSS, UserRole.MANAGER, UserRole.TEAM_LEAD, UserRole.TEAM_MEMBER, UserRole.FIELD_USER, UserRole.ADMIN],
+  MANAGER: [UserRole.TEAM_LEAD, UserRole.TEAM_MEMBER],
 };
 
 function stripPassword<T extends { passwordHash: string }>(user: T) {
@@ -27,60 +27,18 @@ async function canManageUser(
   targetUserId: string
 ) {
   if (auth.role === 'SUPER_ADMIN') return true;
-  // FIELD_USER and ADMIN can be managed by any SUPER_BOSS
+  
+  if (auth.role === 'SUPER_BOSS') return true; // DC Heads have global management rights
+
   const target = await prisma.user.findUnique({
     where: { id: targetUserId },
     select: { id: true, parentId: true, role: true },
   });
   if (!target) return false;
-  if (target.role === 'FIELD_USER' || target.role === 'ADMIN') {
-    return ['SUPER_BOSS', 'SUPER_ADMIN'].includes(auth.role);
-  }
-  if (!['SUPER_BOSS', 'MANAGER'].includes(auth.role)) return false;
 
   if (auth.role === 'MANAGER') {
-    return target.role === UserRole.TEAM_MEMBER && target.parentId === auth.userId;
-  }
-
-  if (auth.role === 'SUPER_BOSS') {
-    // DC Head can manage other DC Heads they created
-    if (target.role === UserRole.SUPER_BOSS) {
-      return target.parentId === auth.userId;
-    }
-
-    if (target.role === UserRole.MANAGER) {
-      if (target.parentId === auth.userId) return true;
-      // Also allow if manager is under a child DC Head
-      const parent = target.parentId
-        ? await prisma.user.findUnique({
-            where: { id: target.parentId },
-            select: { parentId: true },
-          })
-        : null;
-      return parent?.parentId === auth.userId;
-    }
-
-    if (target.role === UserRole.TEAM_MEMBER) {
-      if (target.parentId === auth.userId) return true;
-
-      const parent = target.parentId
-        ? await prisma.user.findUnique({
-            where: { id: target.parentId },
-            select: { parentId: true, role: true },
-          })
-        : null;
-
-      if (parent?.parentId === auth.userId) return true;
-      // If member is under a manager whose parent is a child DC Head
-      if (parent?.role === UserRole.MANAGER && parent.parentId) {
-        const grandparent = await prisma.user.findUnique({
-          where: { id: parent.parentId },
-          select: { parentId: true },
-        });
-        return grandparent?.parentId === auth.userId;
-      }
-      return false;
-    }
+    // Managers can manage their own team (Team Leads and Team Members)
+    return (target.role === UserRole.TEAM_LEAD || target.role === UserRole.TEAM_MEMBER) && target.parentId === auth.userId;
   }
 
   return false;
@@ -100,50 +58,12 @@ async function resolveParentId(
     throw new Error('Your session is outdated. Please login again.');
   }
 
-  if (auth.role === 'MANAGER') {
-    return authUser.id;
+  if (auth.role === 'SUPER_ADMIN' || auth.role === 'SUPER_BOSS') {
+    return requestedParentId;
   }
 
-  if (auth.role === 'SUPER_BOSS') {
-    if (role === UserRole.SUPER_BOSS) {
-      return authUser.id;
-    }
-
-    if (role === UserRole.MANAGER) {
-      if (!requestedParentId) return authUser.id;
-
-      const validParent = await prisma.user.findFirst({
-        where: {
-          id: requestedParentId,
-          role: { in: [UserRole.SUPER_BOSS] },
-          OR: [{ id: authUser.id }, { parentId: authUser.id }],
-          isActive: true,
-        },
-        select: { id: true },
-      });
-
-      if (!validParent) throw new Error('Invalid DC Head selection');
-      return validParent.id;
-    }
-
-    if (role === UserRole.TEAM_MEMBER) {
-      if (!requestedParentId) return authUser.id;
-
-      const validParent = await prisma.user.findFirst({
-        where: {
-          id: requestedParentId,
-          role: { in: [UserRole.SUPER_BOSS, UserRole.MANAGER] },
-          isActive: true,
-        },
-        select: { id: true, parentId: true },
-      });
-
-      if (!validParent) {
-        throw new Error('Selected reporting parent is invalid');
-      }
-
-      return validParent.id;
-    }
+  if (auth.role === 'MANAGER') {
+    return authUser.id;
   }
 
   return requestedParentId || null;
@@ -156,55 +76,61 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { searchParams } = new URL(req.url);
-  const role = searchParams.get('role');
-  const where: Prisma.UserWhereInput = {};
+  try {
+    const { searchParams } = new URL(req.url);
+    const role = searchParams.get('role');
+    const where: Prisma.UserWhereInput = {};
 
-  // Check if requesting field-type users specifically
-  const roleValues = role ? role.split(',').filter(r => Object.values(UserRole).includes(r as UserRole)) : [];
-  const isFieldQuery = roleValues.some(r => ['FIELD_USER', 'ADMIN'].includes(r));
+    // Check if requesting field-type users specifically
+    const roleValues = role ? role.split(',').filter(r => Object.values(UserRole).includes(r as UserRole)) : [];
+    const isFieldQuery = roleValues.some(r => ['FIELD_USER', 'ADMIN'].includes(r));
 
-  if (isFieldQuery) {
-    // Field users have no parent chain — any SUPER_BOSS or SUPER_ADMIN can see all of them
-    if (!['SUPER_ADMIN', 'SUPER_BOSS'].includes(auth.role)) {
-      return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
-    }
-    if (roleValues.length > 0) {
-      where.role = { in: roleValues as UserRole[] };
-    }
-  } else {
-    if (auth.role === 'SUPER_BOSS' || auth.role === 'SUPER_ADMIN') {
-      // no filter — see all for mapping transparency
-    } else if (auth.role === 'MANAGER') {
-      where.parentId = auth.userId;
+    if (isFieldQuery) {
+      // Field users have no parent chain — any SUPER_BOSS or SUPER_ADMIN can see all of them
+      if (!['SUPER_ADMIN', 'SUPER_BOSS'].includes(auth.role)) {
+        return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
+      }
+      if (roleValues.length > 0) {
+        where.role = { in: roleValues as UserRole[] };
+      }
     } else {
-      where.id = auth.userId;
+      if (auth.role === 'SUPER_BOSS' || auth.role === 'SUPER_ADMIN') {
+        // no filter — see all for mapping transparency
+      } else if (auth.role === 'MANAGER') {
+        where.parentId = auth.userId;
+      } else {
+        where.id = auth.userId;
+      }
+
+      if (roleValues.length === 1) {
+        where.role = roleValues[0] as UserRole;
+      } else if (roleValues.length > 1) {
+        where.role = { in: roleValues as UserRole[] };
+      }
     }
 
-    if (roleValues.length === 1) {
-      where.role = roleValues[0] as UserRole;
-    } else if (roleValues.length > 1) {
-      where.role = { in: roleValues as UserRole[] };
-    }
-  }
-
-  const users = await prisma.user.findMany({
-    where,
-    include: {
-      parent: { select: { id: true, name: true, role: true } },
-      district: { select: { id: true, name: true, code: true } },
-      rrCategories: {
-        select: { id: true, title: true },
-        orderBy: { sortOrder: 'asc' },
+    const users = await prisma.user.findMany({
+      where,
+      include: {
+        parent: { select: { id: true, name: true, role: true } },
+        // functional: { select: { id: true, name: true, role: true } }, // Temporarily disabled for client sync
+        district: { select: { id: true, name: true, code: true } },
+        rrCategories: {
+          select: { id: true, title: true },
+          orderBy: { sortOrder: 'asc' },
+        },
       },
-    },
-    orderBy: [{ role: 'asc' }, { name: 'asc' }],
-  });
+      orderBy: [{ role: 'asc' }, { name: 'asc' }],
+    });
 
-  return NextResponse.json({
-    success: true,
-    data: users.map(stripPassword),
-  });
+    return NextResponse.json({
+      success: true,
+      data: users.map(stripPassword),
+    });
+  } catch (err: any) {
+    console.error('USERS_GET_CRASH', err);
+    return NextResponse.json({ success: false, error: `Database sync required: ${err.message}` }, { status: 500 });
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -225,6 +151,7 @@ export async function POST(req: NextRequest) {
     const domain = body.domain ? String(body.domain) : null;
     const photoUrl = body.photoUrl ? String(body.photoUrl) : null;
     const parentId = body.parentId ? String(body.parentId) : null;
+    const functionalId = body.functionalId ? String(body.functionalId) : null;
     const districtId = body.districtId ? String(body.districtId) : null;
     const rrCategories = Array.isArray(body.rrCategories) ? (body.rrCategories as RRInput[]) : [];
 
@@ -280,14 +207,22 @@ export async function POST(req: NextRequest) {
           name,
           email,
           passwordHash,
-          role,
+          // role, // Move to raw SQL below to avoid enum validation issues
           designation,
           domain,
           photoUrl,
-          parentId: resolvedParentId,
+          parent: resolvedParentId ? { connect: { id: resolvedParentId } } : undefined,
           districtId: isFieldRole ? (districtId || null) : null,
         },
       });
+
+      // Unified robust update for schema fields
+      await tx.$executeRaw`UPDATE users SET role = ${role}::"UserRole" WHERE id = ${user.id}`;
+      
+      if (functionalId) {
+        // Manual functional_id update to bypass Prisma check
+        await tx.$executeRaw`UPDATE users SET functional_id = ${functionalId} WHERE id = ${user.id}`;
+      }
 
       const validRRs = rrCategories.filter(
         item => String(item.title || '').trim() && String(item.responsibilities || '').trim()
@@ -339,19 +274,52 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
     }
 
+    const updateData: any = {
+      name: body.name ? String(body.name) : undefined,
+      email: body.email ? String(body.email).toLowerCase().trim() : undefined,
+      designation: typeof body.designation === 'string' ? body.designation : undefined,
+      domain: typeof body.domain === 'string' ? body.domain : undefined,
+      photoUrl: typeof body.photoUrl === 'string' ? body.photoUrl : undefined,
+      isActive: typeof body.isActive === 'boolean' ? body.isActive : undefined,
+    };
+
+    // Handle password update if provided
+    if (body.password) {
+      updateData.passwordHash = await hashPassword(String(body.password));
+    }
+
+    // Check email uniqueness if being updated
+    if (updateData.email) {
+      const existing = await prisma.user.findFirst({
+        where: { email: updateData.email, NOT: { id } }
+      });
+      if (existing) {
+        return NextResponse.json({ success: false, error: 'Email already exists for another user' }, { status: 409 });
+      }
+    }
+
+    // 1. Standard update for known fields
     const updated = await prisma.user.update({
       where: { id },
-      data: {
-        name: body.name ? String(body.name) : undefined,
-        designation: typeof body.designation === 'string' ? body.designation : undefined,
-        domain: typeof body.domain === 'string' ? body.domain : undefined,
-        photoUrl: typeof body.photoUrl === 'string' ? body.photoUrl : undefined,
-        isActive: typeof body.isActive === 'boolean' ? body.isActive : undefined,
-      },
+      data: updateData,
     });
 
-    return NextResponse.json({ success: true, data: stripPassword(updated) });
-  } catch (error: any) {
+    // 2. High-Robustness Update: Use Raw SQL for hierarchy to bypass stuck Prisma Client DLLs
+    // This is the permanent fix for the "Unknown argument" error on Windows.
+    if (body.parentId !== undefined) {
+       const pId = body.parentId || null;
+       await prisma.$executeRaw`UPDATE users SET parent_id = ${pId} WHERE id = ${id}`;
+    }
+    if (body.functionalId !== undefined) {
+        const fId = body.functionalId || null;
+        await prisma.$executeRaw`UPDATE users SET functional_id = ${fId} WHERE id = ${id}`;
+     }
+     if (body.role !== undefined) {
+        await prisma.$executeRaw`UPDATE users SET role = ${body.role}::"UserRole" WHERE id = ${id}`;
+     }
+ 
+     return NextResponse.json({ success: true, data: stripPassword(updated) });
+   } catch (error: any) {
     console.error('USER_PATCH_ERROR', error);
     return NextResponse.json(
       { success: false, error: error?.message || 'Server error' },

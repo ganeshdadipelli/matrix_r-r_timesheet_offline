@@ -18,11 +18,16 @@ export async function GET() {
     return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
   }
 
+  let districtIds: string[] = [];
+  try { districtIds = JSON.parse((user as any).districtIdsJson || '[]'); } catch {}
+  if (!districtIds.length && user.districtId) districtIds = [user.districtId];
+
   return NextResponse.json({
     success: true,
     data: {
       id: user.id, name: user.name, email: user.email,
       role: user.role, districtId: user.districtId,
+      districtIds,
       district: user.district
         ? { id: user.district.id, name: user.district.name, code: user.district.code }
         : null,

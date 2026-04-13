@@ -44,9 +44,9 @@ type RRRow = { title: string; responsibilities: string; kpiTargets: string; acti
 const EMPTY_RR: RRRow = { title: '', responsibilities: '', kpiTargets: '', actionPoints: '' };
 
 const ROLE_OPTIONS: Record<string, { value: string; label: string }[]> = {
-  SUPER_ADMIN: [{ value: 'SUPER_BOSS', label: 'DC Head' }, { value: 'MANAGER', label: 'Manager' }, { value: 'TEAM_MEMBER', label: 'Team Member' }],
-  SUPER_BOSS: [{ value: 'SUPER_BOSS', label: 'DC Head' }, { value: 'MANAGER', label: 'Manager' }, { value: 'TEAM_MEMBER', label: 'Team Member' }],
-  MANAGER: [{ value: 'TEAM_MEMBER', label: 'Team Member' }],
+  SUPER_ADMIN: [{ value: 'SUPER_BOSS', label: 'DC Head' }, { value: 'MANAGER', label: 'Manager' }, { value: 'TEAM_LEAD', label: 'Team Lead' }, { value: 'TEAM_MEMBER', label: 'Team Member' }],
+  SUPER_BOSS: [{ value: 'SUPER_BOSS', label: 'DC Head' }, { value: 'MANAGER', label: 'Manager' }, { value: 'TEAM_LEAD', label: 'Team Lead' }, { value: 'TEAM_MEMBER', label: 'Team Member' }],
+  MANAGER: [{ value: 'TEAM_LEAD', label: 'Team Lead' }, { value: 'TEAM_MEMBER', label: 'Team Member' }],
 };
 
 function Avatar({ name, photoUrl }: { name: string; photoUrl?: string | null }) {
@@ -71,8 +71,7 @@ export default function AdminPage() {
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [form, setForm] = useState({
-    name: '', email: '', password: 'DC@2026', role: roleOptions[0]?.value || 'TEAM_MEMBER',
-    designation: '', domain: '', photoUrl: '', parentId: '',
+    name: '', email: '', password: 'DC@2026', role: 'TEAM_MEMBER', designation: '', domain: '', photoUrl: '', parentId: '', functionalId: '',
   });
 
   const setField = (key: string, value: any) => {
@@ -87,7 +86,7 @@ export default function AdminPage() {
   const [selectedManagerId, setSelectedManagerId] = useState<string>('');
 
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ name: '', designation: '', domain: '', photoUrl: '', isActive: true });
+  const [editForm, setEditForm] = useState({ name: '', email: '', password: '', designation: '', domain: '', photoUrl: '', isActive: true, role: '', parentId: '', functionalId: '' });
 
   const needsManagerSelection = useMemo(() => {
     return ['SUPER_ADMIN', 'SUPER_BOSS'].includes(user?.role || '');
@@ -98,16 +97,21 @@ export default function AdminPage() {
     try {
       const [hierarchyRes, usersRes] = await Promise.all([
         apiFetch('/api/v1/hierarchy'), 
-        apiFetch('/api/v1/users?role=MANAGER,SUPER_BOSS')
+        apiFetch('/api/v1/users?role=MANAGER,SUPER_BOSS,TEAM_LEAD')
       ]);
       const hierarchyJson = await hierarchyRes.json();
       const usersJson = await usersRes.json();
 
       if (hierarchyJson.success) {
         setHierarchy(hierarchyJson.data);
-        if (!selectedManagerId && hierarchyJson.data?.owner) {
-          // Default to first owner/root if not set
-           setSelectedManagerId(hierarchyJson.data.owner.id);
+        if (!selectedManagerId) {
+           if (hierarchyJson.data.type === 'manager' && hierarchyJson.data.self) {
+             setSelectedManagerId(hierarchyJson.data.self.id);
+           } else if (hierarchyJson.data.owner) {
+             setSelectedManagerId(hierarchyJson.data.owner.id);
+           } else if (hierarchyJson.data.roots?.length > 0) {
+             setSelectedManagerId(hierarchyJson.data.roots[0].owner.id);
+           }
         }
       }
       if (usersJson.success) setManagerOptions(usersJson.data || []);
@@ -197,7 +201,7 @@ export default function AdminPage() {
 
       setSuccess(`${form.name} created successfully.`);
       setIsCreateModalOpen(false);
-      setForm({ name: '', email: '', password: 'DC@2026', role: roleOptions[0]?.value || 'TEAM_MEMBER', designation: '', domain: '', photoUrl: '', parentId: '' });
+      setForm({ name: '', email: '', password: 'DC@2026', role: roleOptions[0]?.value || 'TEAM_MEMBER', designation: '', domain: '', photoUrl: '', parentId: '', functionalId: '' });
       setRrRows([{ ...EMPTY_RR }]);
       await loadData();
     } catch {
@@ -272,7 +276,9 @@ export default function AdminPage() {
                 <Avatar name={ws.name} photoUrl={ws.photoUrl} />
                 <div className="flex-1 min-w-0">
                   <p className={`font-bold truncate text-[13px] ${selectedManagerId === ws.id ? 'text-indigo-400' : 'text-slate-200'}`}>{ws.name}</p>
-                  <p className="text-[10px] uppercase font-bold text-slate-500 mt-1 truncate">{ws.designation || ws.role}</p>
+                  <p className="text-[10px] uppercase font-bold text-slate-500 mt-1 truncate">
+                    {['MANAGER', 'TEAM_LEAD'].includes(ws.role) ? `${ws.role.replace('_', ' ')} - ${ws.designation || 'Unit Head'}` : (ws.designation || ws.role)}
+                  </p>
                 </div>
               </button>
             ))}
@@ -291,7 +297,7 @@ export default function AdminPage() {
                         <div className="flex items-center gap-3">
                           <h1 className="text-2xl font-black text-white tracking-tight leading-none">{currentWorkspace.name}</h1>
                           <span className={`rounded-full px-2.5 py-0.5 text-[9px] font-black uppercase tracking-widest ${currentWorkspace.role === 'SUPER_BOSS' ? 'bg-blue-500 text-white' : 'bg-indigo-500 text-white'}`}>
-                            {currentWorkspace.role === 'SUPER_BOSS' ? 'DC Head' : 'Manager'}
+                            {currentWorkspace.role === 'SUPER_BOSS' ? 'DC Head' : currentWorkspace.role.replace('_', ' ')}
                           </span>
                         </div>
                         <p className="mt-2 text-sm text-slate-400 flex items-center gap-2 font-bold uppercase tracking-wide">
@@ -299,11 +305,25 @@ export default function AdminPage() {
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                       <button className="flex items-center gap-2 rounded-xl bg-white/5 border border-white/10 px-4 py-2 text-xs font-bold text-slate-200 hover:bg-white/10 transition" onClick={() => setEditingId(currentWorkspace.id)}><Pencil className="h-4 w-4" /> Edit</button>
-                       <Link href={`/rr?userId=${currentWorkspace.id}`} className="flex items-center gap-2 rounded-xl bg-white/5 border border-white/10 px-4 py-2 text-xs font-bold text-slate-200 hover:bg-white/10 transition"><Shield className="h-4 w-4" /> Matrix</Link>
-                       <button className="flex items-center gap-2 rounded-xl bg-red-500/10 border border-red-500/20 px-4 py-2 text-xs font-bold text-red-400 hover:bg-red-500/20 transition" onClick={() => removePerson(currentWorkspace)}><Trash2 className="h-4 w-4" /> Delete</button>
-                    </div>
+                     <div className="flex items-center gap-2">
+                        <button className="flex items-center gap-2 rounded-xl bg-white/5 border border-white/10 px-4 py-2 text-xs font-bold text-slate-200 hover:bg-white/10 transition" onClick={() => {
+                          setEditingId(currentWorkspace.id);
+                          setEditForm({
+                            name: currentWorkspace.name,
+                            email: currentWorkspace.email,
+                            password: '',
+                            designation: currentWorkspace.designation || '',
+                            domain: currentWorkspace.domain || '',
+                            photoUrl: currentWorkspace.photoUrl || '',
+                            isActive: currentWorkspace.isActive,
+                            role: currentWorkspace.role,
+                            parentId: currentWorkspace.parentId || '',
+                            functionalId: (currentWorkspace as any).functionalId || '',
+                          });
+                        }}><Pencil className="h-4 w-4" /> Edit</button>
+                        <Link href={`/rr?userId=${currentWorkspace.id}`} className="flex items-center gap-2 rounded-xl bg-white/5 border border-white/10 px-4 py-2 text-xs font-bold text-slate-200 hover:bg-white/10 transition"><Shield className="h-4 w-4" /> Matrix</Link>
+                        <button className="flex items-center gap-2 rounded-xl bg-red-500/10 border border-red-500/20 px-4 py-2 text-xs font-bold text-red-400 hover:bg-red-500/20 transition" onClick={() => removePerson(currentWorkspace)}><Trash2 className="h-4 w-4" /> Delete</button>
+                     </div>
                  </div>
               </div>
 
@@ -340,7 +360,21 @@ export default function AdminPage() {
                            </td>
                            <td className="px-6 py-5 text-right">
                               <div className="flex items-center justify-end gap-1.5 opacity-60 group-hover:opacity-100 transition-opacity">
-                                <button className="p-2.5 text-slate-400 hover:text-white hover:bg-white/5 rounded-xl transition" onClick={() => setEditingId(member.id)} title="Update Details"><Pencil className="h-4 w-4" /></button>
+                                <button className="p-2.5 text-slate-400 hover:text-white hover:bg-white/5 rounded-xl transition" onClick={() => {
+                                   setEditingId(member.id);
+                                   setEditForm({
+                                     name: member.name,
+                                     email: member.email,
+                                     password: '',
+                                     designation: member.designation || '',
+                                     domain: member.domain || '',
+                                     photoUrl: member.photoUrl || '',
+                                     isActive: member.isActive,
+                                     role: member.role,
+                                     parentId: member.parentId || '',
+                                     functionalId: (member as any).functionalId || '',
+                                   });
+                                 }} title="Update Details"><Pencil className="h-4 w-4" /></button>
                                 <Link href={`/rr?userId=${member.id}`} className="p-2.5 text-slate-400 hover:text-white hover:bg-white/5 rounded-xl transition" title="View Responsibilities"><Shield className="h-4 w-4" /></Link>
                                 <button className="p-2.5 text-slate-400 hover:text-red-400 hover:bg-red-500/5 rounded-xl transition" onClick={() => removePerson(member)} title="De-provision"><Trash2 className="h-4 w-4" /></button>
                               </div>
@@ -368,7 +402,7 @@ export default function AdminPage() {
       {/* Provisioning Modal */}
       {isCreateModalOpen && (
         <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 animate-in fade-in duration-300">
-           <div className="w-full max-w-2xl bg-[#0b111a] rounded-[2.5rem] border border-white/10 shadow-[0_32px_64px_-12px_rgba(0,0,0,0.8)] flex flex-col max-h-[90vh]">
+           <div className="w-full max-w-4xl bg-[#0b111a] rounded-[2.5rem] border border-white/10 shadow-[0_32px_64px_-12px_rgba(0,0,0,0.8)] flex flex-col max-h-[90vh]">
               <div className="p-8 border-b border-white/5 flex items-center justify-between bg-gradient-to-r from-indigo-900/10 to-transparent">
                  <div>
                    <h2 className="text-2xl font-black text-white tracking-tight uppercase">Provisioning Deck</h2>
@@ -390,40 +424,78 @@ export default function AdminPage() {
                        </div>
                     </div>
 
-                    <div className="grid md:grid-cols-2 gap-6">
-                       <div className="space-y-2">
-                          <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Access Tier (Role)</label>
-                          <select value={form.role} onChange={e => setField('role', e.target.value)} className="w-full px-5 py-4 bg-[#111823] border border-white/5 rounded-2xl text-white outline-none appearance-none cursor-pointer focus:border-indigo-500/50">
-                             {roleOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                          </select>
-                       </div>
-                       <div className="space-y-2">
-                          <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Function/Designation</label>
-                          <input value={form.designation} onChange={e => setField('designation', e.target.value)} className="w-full px-5 py-4 bg-[#111823] border border-white/5 rounded-2xl text-white outline-none focus:border-indigo-500/50 focus:ring-4 focus:ring-indigo-500/5 transition" placeholder="Lead Architect" />
-                       </div>
-                    </div>
+                     <div className="grid md:grid-cols-2 gap-6">
+                        <div className="space-y-2">
+                           <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Access Tier (Role)</label>
+                           <select value={form.role} onChange={e => setField('role', e.target.value)} className="w-full px-5 py-4 bg-[#111823] border border-white/5 rounded-2xl text-white outline-none appearance-none cursor-pointer focus:border-indigo-500/50">
+                              {roleOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                           </select>
+                        </div>
+                        <div className="space-y-2">
+                           <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Security Credentials (Initial Password)</label>
+                           <input type="text" value={form.password} onChange={e => setField('password', e.target.value)} className="w-full px-5 py-4 bg-[#111823] border border-white/5 rounded-2xl text-white outline-none focus:border-indigo-500/50 transition" placeholder="DC@2026" />
+                        </div>
+                     </div>
 
-                    <div className="space-y-2">
-                       <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Direct Reporting Manager</label>
-                       <select value={form.parentId} onChange={e => setField('parentId', e.target.value)} className="w-full px-5 py-4 bg-[#111823] border border-white/5 rounded-2xl text-white outline-none appearance-none cursor-pointer focus:border-indigo-500/50">
-                          <option value="">{form.role === 'SUPER_BOSS' ? 'Global Root (No Superiors)' : 'Assign Reporting Authority...'}</option>
-                          {managerOptions.map(m => (
-                            <option key={m.id} value={m.id}>{m.role === 'SUPER_BOSS' ? `[Head] ${m.name}` : m.name}</option>
-                          ))}
-                       </select>
+                     <div className="grid md:grid-cols-2 gap-6">
+                        <div className="space-y-2">
+                           <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Function/Designation</label>
+                           <input value={form.designation} onChange={e => setField('designation', e.target.value)} className="w-full px-5 py-4 bg-[#111823] border border-white/5 rounded-2xl text-white outline-none focus:border-indigo-500/50 transition" placeholder="Lead Architect" />
+                        </div>
+                        <div className="space-y-2">
+                           <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Operational Domain</label>
+                           <input value={form.domain} onChange={e => setField('domain', e.target.value)} className="w-full px-5 py-4 bg-[#111823] border border-white/5 rounded-2xl text-white outline-none focus:border-indigo-500/50 transition" placeholder="Applications / Infrastructure" />
+                        </div>
+                     </div>
+
+                    <div className="grid md:grid-cols-2 gap-6">
+                      <div className="space-y-2">
+                         <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Direct Reporting Manager</label>
+                         <select value={form.parentId} onChange={e => setField('parentId', e.target.value)} className="w-full px-5 py-4 bg-[#111823] border border-white/5 rounded-2xl text-white outline-none appearance-none cursor-pointer focus:border-indigo-500/50">
+                            <option value="">{form.role === 'SUPER_BOSS' ? 'Global Root (No Superiors)' : 'Assign Reporting Authority...'}</option>
+                            {managerOptions.map(m => (
+                              <option key={m.id} value={m.id}>{m.role === 'SUPER_BOSS' ? `[Head] ${m.name}` : m.name}</option>
+                            ))}
+                         </select>
+                      </div>
+                      <div className="space-y-2">
+                         <label className="text-[10px] font-black text-amber-500 uppercase tracking-widest ml-1">Functional DC Head (Optional)</label>
+                          <select value={form.functionalId} onChange={e => setField('functionalId', e.target.value)} className="w-full px-5 py-4 bg-[#111823] border border-amber-500/10 rounded-2xl text-white outline-none appearance-none cursor-pointer focus:border-indigo-500/50">
+                             <option value="">No Functional Reporting</option>
+                             {managerOptions.filter(m => m.role === 'SUPER_BOSS' || m.role === 'MANAGER').map(m => (
+                               <option key={m.id} value={m.id}>{m.name} ({m.role === 'SUPER_BOSS' ? 'DC Head' : 'Manager'})</option>
+                             ))}
+                          </select>
+                      </div>
                     </div>
 
                     <div className="space-y-4 pt-6">
                        <div className="flex items-center justify-between px-1">
-                          <h4 className="text-xs font-black text-white uppercase tracking-widest">Initial Matrix Bindings</h4>
-                          <button type="button" onClick={() => setRrRows([...rrRows, {...EMPTY_RR}])} className="text-[10px] font-black text-indigo-400 hover:text-indigo-300 uppercase">+ Bind Layer</button>
+                          <h4 className="text-sm font-black text-white uppercase tracking-[0.2em]">Initial Matrix Bindings</h4>
+                          <button type="button" onClick={() => setRrRows([...rrRows, {...EMPTY_RR}])} className="flex items-center gap-1.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 px-3 py-1.5 text-[10px] font-black text-indigo-400 hover:bg-indigo-500/20 transition uppercase">+ Add Responsibility Layer</button>
                        </div>
-                       <div className="space-y-3">
+                       <div className="grid gap-4">
                           {rrRows.map((row, idx) => (
-                            <div key={idx} className="bg-white/5 p-5 rounded-[1.5rem] border border-white/5 relative group">
-                               {rrRows.length > 1 && <button type="button" onClick={() => setRrRows(rrRows.filter((_, i) => i !== idx))} className="absolute top-4 right-4 text-slate-500 hover:text-red-400"><X className="h-4 w-4" /></button>}
-                               <input value={row.title} onChange={e => { const n = [...rrRows]; n[idx].title = e.target.value; setRrRows(n); }} className="w-full bg-transparent border-none text-white font-bold text-sm focus:ring-0 mb-2 p-0" placeholder="Responsibility Title..." />
-                               <textarea value={row.responsibilities} onChange={e => { const n = [...rrRows]; n[idx].responsibilities = e.target.value; setRrRows(n); }} className="w-full bg-transparent border-none text-slate-400 text-xs focus:ring-0 p-0 resize-none" rows={2} placeholder="Explain specific KPIs/Tasks..." />
+                            <div key={idx} className="bg-[#111823] p-6 rounded-[2rem] border border-white/5 relative group transition-all hover:border-indigo-500/30 hover:shadow-2xl hover:shadow-indigo-500/5">
+                               {rrRows.length > 1 && (
+                                 <button type="button" onClick={() => setRrRows(rrRows.filter((_, i) => i !== idx))} className="absolute top-6 right-6 p-2 rounded-full bg-red-500/5 text-red-500 opacity-0 group-hover:opacity-100 transition hover:bg-red-500/20">
+                                   <X className="h-4 w-4" />
+                                 </button>
+                               )}
+                               <div className="flex items-center gap-3 mb-4">
+                                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/10 text-[10px] font-black text-indigo-400 border border-indigo-500/20">{idx + 1}</div>
+                                 <input value={row.title} onChange={e => { const n = [...rrRows]; n[idx].title = e.target.value; setRrRows(n); }} className="flex-1 bg-transparent border-none text-white font-black text-base focus:ring-0 p-0 placeholder:text-slate-600" placeholder="Responsibility Title (e.g. Infrastructure Maintenance)" />
+                               </div>
+                               <div className="grid md:grid-cols-2 gap-4">
+                                 <div className="space-y-2">
+                                   <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Core Responsibilities</label>
+                                   <textarea value={row.responsibilities} onChange={e => { const n = [...rrRows]; n[idx].responsibilities = e.target.value; setRrRows(n); }} className="w-full bg-white/5 border border-white/5 rounded-2xl p-4 text-slate-300 text-sm focus:border-indigo-500/50 focus:ring-4 focus:ring-indigo-500/5 transition resize-none" rows={3} placeholder="Describe the specific duties and scope..." />
+                                 </div>
+                                 <div className="space-y-2">
+                                   <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">KPI Targets & Metrics</label>
+                                   <textarea value={row.kpiTargets} onChange={e => { const n = [...rrRows]; n[idx].kpiTargets = e.target.value; setRrRows(n); }} className="w-full bg-white/5 border border-white/5 rounded-2xl p-4 text-slate-300 text-sm focus:border-indigo-500/50 focus:ring-4 focus:ring-indigo-500/5 transition resize-none" rows={3} placeholder="e.g. 99.9% Uptime, Zero major incidents..." />
+                                 </div>
+                               </div>
                             </div>
                           ))}
                        </div>
@@ -442,29 +514,96 @@ export default function AdminPage() {
       )}
 
       {/* Edit Modal */}
-      {editingId && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/80 backdrop-blur-md animate-in fade-in">
-           <div className="w-full max-w-lg bg-[#0b111a] rounded-[2rem] p-8 border border-white/10 shadow-3xl">
-              <h3 className="text-xl font-black text-white uppercase mb-6 tracking-tight">Sync Identity Profile</h3>
-              <div className="space-y-4">
-                 <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Full Name</label>
-                    <input value={editForm.name} onChange={e => setEditForm(p => ({ ...p, name: e.target.value }))} className="w-full bg-[#111823] border border-white/5 rounded-2xl px-5 py-3.5 text-white outline-none" />
+       {editingId && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-950/90 backdrop-blur-xl p-4 animate-in fade-in duration-300">
+           <div className="w-full max-w-xl bg-[#0b111a] rounded-[2.5rem] border border-white/10 shadow-[0_32px_64px_-12px_rgba(0,0,0,0.8)] flex flex-col max-h-[90vh]">
+              <div className="p-8 border-b border-white/5 flex items-center justify-between bg-gradient-to-r from-indigo-900/10 to-transparent">
+                <div>
+                  <h3 className="text-2xl font-black text-white uppercase tracking-tight">Sync Identity</h3>
+                  <p className="text-xs font-bold text-slate-500 mt-1 uppercase tracking-widest">Modify user credentials and reporting lines</p>
+                </div>
+                <button onClick={() => setEditingId(null)} className="p-2 rounded-xl bg-white/5 text-slate-400 hover:text-white transition"><X className="h-6 w-6" /></button>
+              </div>
+
+              <div className="flex-1 overflow-auto p-8 custom-scrollbar space-y-6">
+                 <div className="grid md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                       <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Full Name</label>
+                       <input value={editForm.name} onChange={e => setEditForm(p => ({ ...p, name: e.target.value }))} className="w-full bg-[#111823] border border-white/5 rounded-2xl px-5 py-4 text-white outline-none focus:border-indigo-500/50" />
+                    </div>
+                    <div className="space-y-2">
+                       <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Operational Email</label>
+                       <input value={editForm.email} onChange={e => setEditForm(p => ({ ...p, email: e.target.value }))} className="w-full bg-[#111823] border border-white/5 rounded-2xl px-5 py-4 text-white outline-none focus:border-indigo-500/50" />
+                    </div>
                  </div>
-                 <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Function</label>
-                    <input value={editForm.designation} onChange={e => setEditForm(p => ({ ...p, designation: e.target.value }))} className="w-full bg-[#111823] border border-white/5 rounded-2xl px-5 py-3.5 text-white outline-none" />
+
+                 <div className="grid md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                       <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Function / Designation</label>
+                       <input value={editForm.designation} onChange={e => setEditForm(p => ({ ...p, designation: e.target.value }))} className="w-full bg-[#111823] border border-white/5 rounded-2xl px-5 py-4 text-white outline-none focus:border-indigo-500/50" />
+                    </div>
+                    <div className="space-y-2">
+                       <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">New Password (Leave blank to keep same)</label>
+                       <input type="text" value={editForm.password} onChange={e => setEditForm(p => ({ ...p, password: e.target.value }))} className="w-full bg-[#111823] border border-white/5 rounded-2xl px-5 py-4 text-white outline-none focus:border-indigo-500/50" placeholder="••••••••" />
+                    </div>
                  </div>
-                 <div className="flex items-center justify-between bg-white/5 p-4 rounded-2xl border border-white/5 mt-6">
-                    <span className="text-sm font-bold text-slate-300">Account Access Active</span>
-                    <button onClick={() => setEditForm(p => ({ ...p, isActive: !p.isActive }))} className={`w-12 h-6 rounded-full transition-colors relative ${editForm.isActive ? 'bg-indigo-600' : 'bg-slate-700'}`}>
-                       <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${editForm.isActive ? 'left-7' : 'left-1'}`} />
+
+                 <div className="grid md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                       <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Operational Domain</label>
+                       <input value={editForm.domain} onChange={e => setEditForm(p => ({ ...p, domain: e.target.value }))} className="w-full bg-[#111823] border border-white/5 rounded-2xl px-5 py-4 text-white outline-none focus:border-indigo-500/50" />
+                    </div>
+                    <div className="space-y-2">
+                       <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Avatar Photo URL</label>
+                       <input value={editForm.photoUrl} onChange={e => setEditForm(p => ({ ...p, photoUrl: e.target.value }))} className="w-full bg-[#111823] border border-white/5 rounded-2xl px-5 py-4 text-white outline-none focus:border-indigo-500/50" placeholder="https://..." />
+                    </div>
+                 </div>
+
+                 <div className="grid md:grid-cols-2 gap-6">
+                   <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Reporting Manager</label>
+                      <select value={editForm.parentId} onChange={e => setEditForm(p => ({ ...p, parentId: e.target.value }))} className="w-full bg-[#111823] border border-white/5 rounded-2xl px-5 py-4 text-white outline-none appearance-none cursor-pointer focus:border-indigo-500/50">
+                         <option value="">Primary Root (No Manager)</option>
+                         {managerOptions.filter(m => m.id !== editingId).map(m => (
+                           <option key={m.id} value={m.id}>{m.role === 'SUPER_BOSS' ? `[Head] ${m.name}` : m.name}</option>
+                         ))}
+                      </select>
+                   </div>
+                   <div className="space-y-2">
+                      <label className="text-[10px] font-black text-amber-500 uppercase tracking-widest ml-1">Functional DC Head</label>
+                          <select value={editForm.functionalId} onChange={e => setEditForm(p => ({ ...p, functionalId: e.target.value }))} className="w-full bg-[#111823] border border-amber-500/10 rounded-2xl px-5 py-4 text-white outline-none appearance-none cursor-pointer focus:border-indigo-500/50">
+                             <option value="">No Functional Reporting</option>
+                             {managerOptions.filter(m => (m.role === 'SUPER_BOSS' || m.role === 'MANAGER') && m.id !== editingId).map(m => (
+                               <option key={m.id} value={m.id}>{m.name} ({m.role === 'SUPER_BOSS' ? 'DC Head' : 'Manager'})</option>
+                             ))}
+                          </select>
+                   </div>
+                 </div>
+
+                 <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Access Level (Role)</label>
+                     <select value={editForm.role} onChange={e => setEditForm(p => ({ ...p, role: e.target.value }))} className="w-full bg-[#111823] border border-white/5 rounded-2xl px-5 py-4 text-white outline-none appearance-none cursor-pointer focus:border-indigo-500/50">
+                        <option value="SUPER_BOSS">DC Head</option>
+                        <option value="MANAGER">Manager</option>
+                        <option value="TEAM_LEAD">Team Lead</option>
+                        <option value="TEAM_MEMBER">Team Member</option>
+                     </select>
+                 </div>
+
+                 <div className="flex items-center justify-between bg-white/5 p-6 rounded-3xl border border-white/5 mt-6">
+                    <div>
+                      <span className="text-sm font-black text-white uppercase tracking-tight">Account Active</span>
+                      <p className="text-[10px] text-slate-500 font-bold uppercase mt-1">Enable or disable system access</p>
+                    </div>
+                    <button onClick={() => setEditForm(p => ({ ...p, isActive: !p.isActive }))} className={`w-14 h-7 rounded-full transition-all relative ${editForm.isActive ? 'bg-indigo-600 shadow-[0_0_15px_rgba(79,70,229,0.4)]' : 'bg-slate-700'}`}>
+                       <div className={`absolute top-1 w-5 h-5 bg-white rounded-full transition-all ${editForm.isActive ? 'left-8' : 'left-1'}`} />
                     </button>
                  </div>
               </div>
-              <div className="mt-8 flex justify-end gap-3">
-                 <button onClick={() => setEditingId(null)} className="px-6 py-3 text-xs font-black text-slate-400 uppercase tracking-widest">Abort</button>
-                 <button onClick={saveEdit} className="px-8 py-3 rounded-2xl bg-indigo-600 text-white text-xs font-black uppercase tracking-widest">Commit Changes</button>
+
+              <div className="p-8 border-t border-white/5 flex justify-end gap-3 bg-slate-900/10">
+                 <button onClick={() => setEditingId(null)} className="px-8 py-3.5 text-xs font-black text-slate-400 uppercase tracking-widest hover:bg-white/5 rounded-2xl transition">Abort</button>
+                 <button onClick={saveEdit} className="px-10 py-3.5 rounded-2xl bg-indigo-600 text-white text-xs font-black uppercase tracking-widest hover:bg-indigo-500 transition shadow-xl shadow-indigo-500/20">Commit Changes</button>
               </div>
            </div>
         </div>

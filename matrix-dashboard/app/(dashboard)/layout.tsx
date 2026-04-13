@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import {
   BarChart3, ClipboardEdit, History, Users, ShieldCheck,
-  Lightbulb, LogOut, Menu, X, Download,
+  Lightbulb, LogOut, Menu, X, Download, Shield,
 } from 'lucide-react';
 
 interface User {
@@ -15,19 +15,29 @@ interface User {
 }
 
 const NAV = [
-  { href: '/dashboard',    label: 'Dashboard',   Icon: BarChart3,     roles: ['FIELD_USER','ADMIN','SUPER_ADMIN'] },
-  { href: '/entry',        label: 'Data Entry',  Icon: ClipboardEdit, roles: ['FIELD_USER','ADMIN','SUPER_ADMIN'] },
-  { href: '/entry/history',label: 'History',     Icon: History,       roles: ['FIELD_USER','ADMIN','SUPER_ADMIN'] },
-  { href: '/data-tools',   label: 'Data Tools',  Icon: Download,      roles: ['FIELD_USER','ADMIN','SUPER_ADMIN'] },
-  { href: '/admin',        label: 'Admin Panel', Icon: Users,         roles: ['ADMIN','SUPER_ADMIN'] },
-  { href: '/insights', label: 'ML Insights', Icon: Lightbulb, roles: ['SUPER_ADMIN'] },
-  { href: '/super-admin',  label: 'Super Admin', Icon: ShieldCheck,   roles: ['SUPER_ADMIN'] },
+  { href: '/dashboard',     label: 'Dashboard',   Icon: BarChart3,     roles: ['FIELD_USER','ADMIN','SUPER_ADMIN'] },
+  { href: '/entry',         label: 'Data Entry',  Icon: ClipboardEdit, roles: ['FIELD_USER','ADMIN','SUPER_ADMIN'] },
+  { href: '/entry/history', label: 'History',     Icon: History,       roles: ['FIELD_USER','ADMIN','SUPER_ADMIN'] },
+  { href: '/data-tools',    label: 'Data Tools',  Icon: Download,      roles: ['FIELD_USER','ADMIN','SUPER_ADMIN'] },
+  { href: '/admin',         label: 'Admin Panel', Icon: Users,         roles: ['ADMIN','SUPER_ADMIN'] },
+  { href: '/insights',      label: 'ML Insights', Icon: Lightbulb,     roles: ['SUPER_ADMIN'] },
+  { href: '/super-admin',   label: 'Audit Logs',  Icon: ShieldCheck,   roles: ['SUPER_ADMIN'] },
 ];
 
-const ROLE_STYLE: Record<string, string> = {
-  SUPER_ADMIN: 'bg-red-500 text-white',
-  ADMIN:       'bg-amber-500 text-white',
-  FIELD_USER:  'bg-emerald-500 text-white',
+const ROLE_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
+  SUPER_ADMIN: { label: 'Super Admin', color: 'text-matrix-peach',  bg: 'bg-matrix-peach/15 border-matrix-peach/30' },
+  ADMIN:       { label: 'Admin',       color: 'text-amber-400',     bg: 'bg-amber-900/30 border-amber-700/30' },
+  FIELD_USER:  { label: 'Field User',  color: 'text-emerald-400',   bg: 'bg-emerald-900/30 border-emerald-700/30' },
+};
+
+const PAGE_TITLES: Record<string, string> = {
+  '/dashboard':     'Dashboard Overview',
+  '/entry':         'Data Entry',
+  '/entry/history': 'Entry History',
+  '/data-tools':    'Data Tools',
+  '/admin':         'User Management',
+  '/insights':      'ML Insights',
+  '/super-admin':   'Audit Logs',
 };
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -39,15 +49,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   useEffect(() => {
     const token   = localStorage.getItem('matrix_token');
     const userRaw = localStorage.getItem('matrix_user');
-
     if (!token || token === 'undefined' || token === 'null' || !userRaw || userRaw === 'undefined' || userRaw === 'null') {
-      window.location.href = '/login';
-      return;
+      window.location.href = '/login'; return;
     }
-
     try {
-      const parsed = JSON.parse(userRaw) as User;
-      setUser(parsed);
+      setUser(JSON.parse(userRaw) as User);
       setReady(true);
     } catch {
       localStorage.removeItem('matrix_token');
@@ -64,67 +70,107 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   if (!ready) return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-      <div className="text-center">
-        <BarChart3 className="w-8 h-8 text-primary-300 mx-auto mb-3 animate-pulse" />
-        <p className="text-slate-400 text-sm">Loading...</p>
+    <div className="min-h-screen bg-matrix-dark flex items-center justify-center">
+      <div className="text-center animate-fade-in">
+        <div className="w-12 h-12 animate-morph-logo mx-auto mb-4 flex items-center justify-center"
+          style={{ background: 'linear-gradient(135deg, #5F6F7D, #D6A38A)' }}>
+          <Shield className="w-6 h-6 text-white" />
+        </div>
+        <p className="text-matrix-cloud/50 text-sm tracking-widest uppercase animate-pulse-soft">
+          Loading…
+        </p>
       </div>
     </div>
   );
 
   const nav = NAV.filter(n => user && n.roles.includes(user.role));
+  const roleConf = user ? (ROLE_CONFIG[user.role] || ROLE_CONFIG.FIELD_USER) : ROLE_CONFIG.FIELD_USER;
+
+  // Resolve current page title
+  const currentTitle = Object.entries(PAGE_TITLES).find(([path]) =>
+    pathname === path || (path.length > 1 && pathname.startsWith(path + '/'))
+  )?.[1] ?? 'Dashboard';
 
   const SidebarContent = () => (
-    <div className="flex flex-col h-full bg-primary-900">
-      <div className="px-5 py-4 border-b border-white/10">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 bg-amber-500 rounded-xl flex items-center justify-center shrink-0">
-            <BarChart3 className="w-5 h-5 text-white" />
+    <div className="flex flex-col h-full" style={{ background: 'linear-gradient(180deg, #161E22 0%, #1A2428 100%)' }}>
+
+      {/* Logo */}
+      <div className="px-5 py-5 border-b border-white/[0.06]">
+        <Link href="/dashboard" onClick={() => setSidebar(false)} className="flex items-center gap-3 group">
+          <div className="w-9 h-9 flex items-center justify-center shrink-0 transition-all duration-300 group-hover:scale-105"
+            style={{
+              background: 'linear-gradient(135deg, #5F6F7D 0%, #D6A38A 100%)',
+              borderRadius: '28% 72% 70% 30% / 30% 30% 70% 70%',
+              animation: 'morphLogo 4s ease-in-out infinite',
+            }}>
+            <Shield className="w-4.5 h-4.5 text-white" style={{ width: '18px', height: '18px' }} />
           </div>
           <div>
-            <p className="text-white font-bold text-sm leading-tight">Matrix Smart</p>
-            <p className="text-blue-300 text-xs">Technologies</p>
+            <p className="font-display font-bold text-matrix-cream text-sm leading-none">Matrix Smart</p>
+            <p className="text-matrix-peach/70 text-[10px] tracking-[0.18em] uppercase mt-0.5">Technologies</p>
           </div>
-        </div>
+        </Link>
       </div>
 
+      {/* User profile */}
       {user && (
-        <div className="px-4 py-3 border-b border-white/10">
+        <div className="px-4 py-4 border-b border-white/[0.06]">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-primary-600 flex items-center justify-center shrink-0">
-              <span className="text-white text-sm font-bold">{user.name.charAt(0).toUpperCase()}</span>
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 text-sm font-bold text-matrix-deeper"
+              style={{ background: 'linear-gradient(135deg, #D6A38A, #c4927a)' }}>
+              {user.name.charAt(0).toUpperCase()}
             </div>
             <div className="min-w-0">
-              <p className="text-white text-sm font-medium truncate">{user.name}</p>
-              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${ROLE_STYLE[user.role] || 'bg-slate-500 text-white'}`}>
-                {user.role.replace('_', ' ')}
+              <p className="text-matrix-cream text-sm font-medium truncate leading-tight">{user.name}</p>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold border uppercase tracking-wide mt-0.5 inline-block ${roleConf.bg} ${roleConf.color}`}>
+                {roleConf.label}
               </span>
             </div>
           </div>
-          {user.district && <p className="text-blue-300 text-xs mt-1.5 pl-12">{user.district.name}</p>}
+          {user.district && (
+            <p className="text-matrix-cloud/40 text-xs mt-2 pl-12 truncate">{user.district.name} District</p>
+          )}
         </div>
       )}
 
-      <nav className="flex-1 px-3 py-3 space-y-0.5 overflow-y-auto">
-        {nav.map(({ href, label, Icon }) => {
+      {/* Navigation */}
+      <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
+        {nav.map(({ href, label, Icon }, idx) => {
           const active = pathname === href ||
             (href.length > 1 && href !== '/entry' && pathname.startsWith(href + '/'));
           return (
             <Link key={href} href={href} onClick={() => setSidebar(false)}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                active ? 'bg-white/15 text-white' : 'text-blue-200 hover:bg-white/10 hover:text-white'
-              }`}>
-              <Icon className="w-4 h-4 shrink-0" />
-              {label}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200
+                animate-slide-in-left group relative overflow-hidden
+                ${active
+                  ? 'text-matrix-cream'
+                  : 'text-matrix-cloud/60 hover:text-matrix-cream hover:bg-white/[0.05]'
+                }`}
+              style={{ animationDelay: `${idx * 40}ms`, animationFillMode: 'both' }}>
+
+              {/* Active indicator */}
+              {active && (
+                <div className="absolute inset-0 rounded-lg"
+                  style={{ background: 'linear-gradient(135deg, rgba(95,111,125,0.2) 0%, rgba(214,163,138,0.08) 100%)', border: '1px solid rgba(95,111,125,0.25)' }} />
+              )}
+              {active && (
+                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-r-full"
+                  style={{ background: 'linear-gradient(180deg, #D6A38A, #5F6F7D)' }} />
+              )}
+
+              <Icon className={`w-4 h-4 shrink-0 relative z-10 transition-colors ${active ? 'text-matrix-peach' : 'text-matrix-mist/60 group-hover:text-matrix-cloud'}`} />
+              <span className="relative z-10">{label}</span>
             </Link>
           );
         })}
       </nav>
 
-      <div className="px-3 py-3 border-t border-white/10">
+      {/* Logout */}
+      <div className="px-3 py-3 border-t border-white/[0.06]">
         <button onClick={handleLogout}
-          className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-blue-200 hover:bg-white/10 hover:text-white transition-colors">
-          <LogOut className="w-4 h-4 shrink-0" />
+          className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium
+                     text-matrix-cloud/40 hover:text-red-400 hover:bg-red-900/10 transition-all duration-200 group">
+          <LogOut className="w-4 h-4 shrink-0 group-hover:rotate-12 transition-transform duration-200" />
           Sign Out
         </button>
       </div>
@@ -132,40 +178,62 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   );
 
   return (
-    <div className="min-h-screen flex bg-slate-50">
-      <aside className="hidden lg:block w-60 shrink-0 fixed inset-y-0 left-0 z-30 shadow-xl">
+    <div className="min-h-screen flex bg-matrix-dark">
+      {/* Desktop sidebar */}
+      <aside className="hidden lg:block w-60 shrink-0 fixed inset-y-0 left-0 z-30 shadow-matrix-xl">
         <SidebarContent />
       </aside>
 
+      {/* Mobile sidebar */}
       {sidebarOpen && (
         <div className="lg:hidden fixed inset-0 z-40 flex">
-          <div className="fixed inset-0 bg-black/60" onClick={() => setSidebar(false)} />
-          <div className="relative w-64 z-50 shadow-2xl"><SidebarContent /></div>
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setSidebar(false)} />
+          <div className="relative w-64 z-50 shadow-matrix-xl animate-slide-in-left">
+            <SidebarContent />
+          </div>
         </div>
       )}
 
       <div className="flex-1 lg:ml-60 flex flex-col min-h-screen">
-        <header className="bg-white border-b border-slate-200 px-4 lg:px-6 py-3 flex items-center gap-3 sticky top-0 z-20 shadow-sm">
+        {/* Top header */}
+        <header className="sticky top-0 z-20 px-4 lg:px-6 py-3 flex items-center gap-3"
+          style={{
+            background: 'rgba(31,42,46,0.85)',
+            backdropFilter: 'blur(12px)',
+            borderBottom: '1px solid rgba(255,255,255,0.06)',
+          }}>
           <button onClick={() => setSidebar(!sidebarOpen)}
-            className="lg:hidden p-2 rounded-lg hover:bg-slate-100 text-slate-500 transition-colors">
+            className="lg:hidden p-2 rounded-lg hover:bg-white/5 text-matrix-cloud/60 transition-colors">
             {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
-          <h1 className="flex-1 font-semibold text-slate-800 text-sm lg:text-base">
-            {nav.find(n => pathname === n.href || pathname.startsWith(n.href + '/'))?.label || 'Dashboard'}
-          </h1>
-          <div className="hidden sm:block text-right">
-            <p className="text-xs text-slate-400">Andhra Pradesh</p>
-            <p className="text-xs font-semibold text-slate-600">Camera Network</p>
+
+          <div className="flex-1">
+            <h1 className="font-display font-semibold text-matrix-cream text-base tracking-tight">
+              {currentTitle}
+            </h1>
           </div>
-          <div className="w-8 h-8 rounded-full bg-primary-600 flex items-center justify-center">
-            <span className="text-white text-xs font-bold">{user?.name?.charAt(0)}</span>
+
+          <div className="hidden sm:flex items-center gap-2 text-right">
+            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse-soft" />
+            <div>
+              <p className="text-[10px] text-matrix-cloud/40 uppercase tracking-widest">Andhra Pradesh</p>
+              <p className="text-xs font-semibold text-matrix-cloud/70">Camera Network</p>
+            </div>
+          </div>
+
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold text-matrix-deeper"
+            style={{ background: 'linear-gradient(135deg, #D6A38A, #c4927a)' }}>
+            {user?.name?.charAt(0).toUpperCase()}
           </div>
         </header>
 
-        <main className="flex-1 p-4 lg:p-6">{children}</main>
+        {/* Page content */}
+        <main className="flex-1 p-4 lg:p-6 animate-fade-in">{children}</main>
 
-        <footer className="border-t border-slate-200 bg-white px-6 py-2.5 text-center text-xs text-slate-400">
-          © 2026 Matrix Smart Technologies · Offline Dependencies Field Data System
+        {/* Footer */}
+        <footer className="px-6 py-3 text-center text-[11px] text-matrix-cloud/25 tracking-wide"
+          style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+          © 2026 Matrix Smart Technologies · Offline Dependencies Field Intelligence System
         </footer>
       </div>
     </div>

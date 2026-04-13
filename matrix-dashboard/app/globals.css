@@ -1,52 +1,154 @@
-/* app/globals.css */
+/* app/globals.css — Matrix Smart Technologies Premium UI */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   * { box-sizing: border-box; }
+
   html { scroll-behavior: smooth; }
-  body { font-family: 'Inter', system-ui, sans-serif; }
+
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background-color: #1F2A2E;
+    color: #EDEAE6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
 }
 
 @layer components {
+  /* ── Buttons ── */
   .btn-primary {
-    @apply bg-primary-600 text-white px-4 py-2 rounded-lg font-medium text-sm
-           hover:bg-primary-700 active:scale-95 transition-all duration-150
-           disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100;
+    @apply bg-matrix-peach text-matrix-deeper px-4 py-2 rounded-lg font-semibold text-sm
+           hover:brightness-110 active:scale-95 transition-all duration-150
+           shadow-glow-peach disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100;
   }
   .btn-secondary {
-    @apply bg-white text-slate-700 border border-slate-300 px-4 py-2 rounded-lg
-           font-medium text-sm hover:bg-slate-50 active:scale-95 transition-all duration-150;
+    @apply bg-matrix-surface text-matrix-cream border border-matrix-border px-4 py-2 rounded-lg
+           font-medium text-sm hover:bg-matrix-border active:scale-95 transition-all duration-150;
+  }
+  .btn-ghost {
+    @apply text-matrix-cloud px-4 py-2 rounded-lg font-medium text-sm
+           hover:bg-white/5 hover:text-matrix-cream active:scale-95 transition-all duration-150;
   }
   .btn-danger {
-    @apply bg-red-600 text-white px-4 py-2 rounded-lg font-medium text-sm
-           hover:bg-red-700 active:scale-95 transition-all duration-150;
+    @apply bg-red-700/80 text-white px-4 py-2 rounded-lg font-medium text-sm
+           hover:bg-red-600 active:scale-95 transition-all duration-150;
   }
+
+  /* ── Inputs ── */
   .input-field {
-    @apply w-full border border-slate-300 rounded-lg px-3 py-2 text-sm
-           focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
-           placeholder-slate-400 bg-white transition-shadow;
+    @apply w-full border border-matrix-border rounded-lg px-3 py-2 text-sm
+           bg-matrix-surface text-matrix-cream
+           focus:outline-none focus:ring-2 focus:ring-matrix-slate/50 focus:border-matrix-slate
+           placeholder-matrix-cloud/40 transition-shadow;
   }
+
+  /* ── Cards ── */
   .card {
-    @apply bg-white rounded-xl border border-slate-200 shadow-sm;
+    @apply bg-matrix-surface rounded-xl border border-matrix-border shadow-matrix;
   }
+  .card-glass {
+    @apply rounded-xl border border-white/10 shadow-matrix;
+    background: linear-gradient(135deg, rgba(38,48,53,0.9) 0%, rgba(26,36,40,0.95) 100%);
+    backdrop-filter: blur(12px);
+  }
+  .card-glow {
+    @apply card transition-all duration-300 hover:shadow-glow-slate hover:border-matrix-slate/40;
+  }
+
+  /* ── Table ── */
   .table-th {
-    @apply px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider
-           bg-slate-50 border-b border-slate-200 whitespace-nowrap;
+    @apply px-3 py-2.5 text-left text-xs font-semibold text-matrix-cloud uppercase tracking-wider
+           bg-matrix-deeper border-b border-matrix-border whitespace-nowrap;
   }
   .table-td {
-    @apply px-3 py-2 text-sm text-slate-700 border-b border-slate-100 whitespace-nowrap font-mono;
+    @apply px-3 py-2.5 text-sm text-matrix-cream border-b border-matrix-border/50 whitespace-nowrap font-mono;
   }
-  .badge-green  { @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800; }
-  .badge-yellow { @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800; }
-  .badge-red    { @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800; }
-  .badge-blue   { @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800; }
-  .badge-gray   { @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700; }
+  .table-tr-hover {
+    @apply hover:bg-white/[0.03] transition-colors duration-100;
+  }
+
+  /* ── Badges ── */
+  .badge-green  { @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-900/50 text-emerald-300 border border-emerald-700/40; }
+  .badge-yellow { @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-900/50   text-amber-300   border border-amber-700/40; }
+  .badge-red    { @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-red-900/50     text-red-300     border border-red-700/40; }
+  .badge-blue   { @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-matrix-slate/20 text-matrix-cloud border border-matrix-slate/30; }
+  .badge-gray   { @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-matrix-deeper  text-matrix-cloud border border-matrix-border; }
+  .badge-peach  { @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-matrix-peach/20 text-matrix-peach border border-matrix-peach/30; }
+
+  /* ── Stat Cards ── */
+  .stat-card {
+    @apply card-glow p-5 relative overflow-hidden;
+  }
+  .stat-card::before {
+    content: '';
+    @apply absolute inset-0 opacity-0 transition-opacity duration-300;
+    background: linear-gradient(135deg, rgba(95,111,125,0.08) 0%, transparent 60%);
+  }
+  .stat-card:hover::before {
+    @apply opacity-100;
+  }
+
+  /* ── Section headers ── */
+  .section-title {
+    @apply font-display text-xl font-bold text-matrix-cream tracking-tight;
+  }
+  .section-subtitle {
+    @apply text-sm text-matrix-cloud/70 mt-0.5;
+  }
+
+  /* ── Tab bar ── */
+  .tab-bar {
+    @apply flex items-center gap-1 bg-matrix-deeper p-1 rounded-xl w-fit border border-matrix-border;
+  }
+  .tab-item {
+    @apply flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all duration-200 text-matrix-cloud hover:text-matrix-cream;
+  }
+  .tab-item-active {
+    @apply bg-matrix-surface text-matrix-cream shadow-matrix-sm border border-matrix-border;
+  }
+
+  /* ── Shimmer loading ── */
+  .shimmer {
+    background: linear-gradient(90deg, #263035 25%, #2E3D44 50%, #263035 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s linear infinite;
+  }
 }
 
-/* Scrollbar */
-::-webkit-scrollbar       { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: #f1f5f9; }
-::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #64748b; }
+/* ── Scrollbar ── */
+::-webkit-scrollbar       { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: #161E22; }
+::-webkit-scrollbar-thumb { background: #3d4b56; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #5F6F7D; }
+
+/* ── Select styling ── */
+select.input-field option {
+  background-color: #263035;
+  color: #EDEAE6;
+}
+
+/* ── Recharts dark overrides ── */
+.recharts-cartesian-grid-horizontal line,
+.recharts-cartesian-grid-vertical line {
+  stroke: rgba(95,111,125,0.15) !important;
+}
+.recharts-text { fill: #A3ADB5 !important; }
+.recharts-legend-item-text { color: #A3ADB5 !important; }
+.recharts-tooltip-wrapper .recharts-default-tooltip {
+  background: #263035 !important;
+  border: 1px solid #2E3D44 !important;
+  border-radius: 8px !important;
+  color: #EDEAE6 !important;
+}
+
+/* ── Ambient orb background helper ── */
+.ambient-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(60px);
+  pointer-events: none;
+  will-change: transform, opacity;
+}
