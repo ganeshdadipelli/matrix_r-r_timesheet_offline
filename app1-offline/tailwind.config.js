@@ -1,1 +1,0 @@
-module.exports={content:['./app/**/*.{ts,tsx}'],theme:{extend:{colors:{primary:{'50':'#eff6ff','100':'#dbeafe','500':'#3b82f6','600':'#1d4ed8','700':'#1e40af','800':'#1e3a8a','900':'#0F4C81'}},fontFamily:{sans:['Inter','system-ui','sans-serif']}}},plugins:[]};
